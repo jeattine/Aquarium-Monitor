@@ -1,0 +1,56 @@
+#------------------------------------------------------------------------------------
+#Class, Gpio, Nag, Label,                 Condition,        Class specific parms
+#------------------------------------------------------------------------------------
+temp,   0,   2,   Water Temp (75-81),    75-82,            10020,        2.4
+temp,   1,  12,   Room Temp,             60-82,            10020,        -0.4 
+ph,     2,   2,   PH,                    7.9-8.5,          -36.23, 21.257
+light,  3,   1,   Main Light,            09:10-20:00=500-1023+21:40-08:00=0-500
+light,  4,   8,   Algae Scrubber Light,  21:15-09:45=200-1023+10:15-20:45=0-300
+rflow,  5,   8,   Water Movers,          14:20-14:00=10-500, NA, NA
+hilow,  6,   2,   Aquarium Water level,  256-768,          Low, High, Ok  
+floor,  7,   4,   Floor,                 1,                Wet, Dry
+hilow,  8,   1,   Sump Water Level,      256-768,          Low, High, Ok
+gpiod,  9,   2,   Return Pump Flow,      0,                Running, Shutdown
+gpiod,  A,   8,   Overflow box level,    1,                High, Ok
+gpiod,  B,   2,   Conditional Power,     0,                On, Off
+gpiod,  C,   8,   Protein Skimmer,       1,                Full, Ok
+gpiod,  D,   8,   Top-off reservoir,     0,                Ok,  Low
+#gpiod, E,   8,   (unused),              0,                NA, NA
+#gpiod, F,   8,   (unused),              0,                NA, NA
+#
+# Notes: 1. Gpio's 0,1 are wired special for temperature sensing:
+#           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input 
+#           All other inputs are wired with a 10K pull-up resistor
+#        2. Gpio's A-F cannot be configured as an analog interface
+#        3. 'Nag' is the number of hours before sending another alert for 
+#           a specific GPIO condition violation that has not cleared.
+#------------------------------------------------------------------------------------
+# Network and Sampling Configuration
+#------------------------------------------------------------------------------------
+# telnet userid and password of the GPIO device
+username=admin
+password=admin
+# local ip address of the GPIO device
+tcpip=192.168.1.103
+# seconds to wait for a telnet command response
+connect_timeout=6
+# seconds to wait before attempting a reconnect after a disconnect
+reconnect_delay=120
+# how many times to attempt a reconnect
+reconnect_attempts=60
+# how many seconds between writing the status out to the cloud file system
+server_update_freq=60
+# how many seconds between sampling of the GPIO inputs
+sample_time=4
+# send email server name
+smtp=smtp.gmail.com
+# address to notify of an alert. Comma separated multiple emails supported
+notify=my_email_address@gmail.com
+# Subject line in the alert email
+email_subject=Alert from MyAquariumName aquarium
+# From address to show up in the alert email
+email_from=aquarium_email_address@gmail.com
+# Local file location to store intermediate status information prior to output
+stats_file=C:/Users/XXXX/aquamon_stats/current.txt
+# cloud storage location to write the status file. Let the OS sync it externally
+cloud_store=C:/Users/XXXX/OneDrive/Aquarium/aquamonitor/status/
