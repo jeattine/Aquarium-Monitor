@@ -7,7 +7,7 @@ The second section of the configuration file contains network and sampling confi
   
 The following images show the various sensors that feed the inputs to the GPIO device:  
 ![Flow Detection](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/FlowDetect.png)  
-![Hi Low Level Detection](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/HighLowDetect.png)  
+![Hi Low Level Detection](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/HiLowDetect.png)  
 ![Random Flow Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/RandomFlowDetect.png)  
 ![Misc Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/VariousDetect.png)  
 ![Conditional and Temp Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/ConditionalTempDetect.png)  
