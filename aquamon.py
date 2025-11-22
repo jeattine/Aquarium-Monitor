@@ -271,7 +271,7 @@ class HighLowLevel(GpioAnalog):
 class Battery(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Battery, self).__init__(gpio_controller, config_file_data)
-        self.samples[:] = [1023]
+        self.samples[:] = [910] * 16
 
     def read_value(self):
         # ---------------------------------------------------------------------------
@@ -279,7 +279,7 @@ class Battery(GpioAnalog):
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
         # Translates the 0V-15V --> 0V-3.3V --> digital 0-1024
         #----------------------------------------------------------------------------
-        voltage = self.averaged_sample/66.5
+        voltage = self.averaged_sample/67.6
         return voltage
     def read_value_text(self, value):
         if value > float(self.config_info[5].strip()):
