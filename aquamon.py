@@ -268,6 +268,26 @@ class HighLowLevel(GpioAnalog):
             return self.config_info[6].strip()
         return self.config_info[7].strip()
 
+class Battery(GpioAnalog):
+    def __init__(self, gpio_controller, config_file_data):
+        super(Battery, self).__init__(gpio_controller, config_file_data)
+        self.samples[:] = [1023]
+
+    def read_value(self):
+        # ---------------------------------------------------------------------------
+        # Requires the following configuration: 
+        #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
+        # Translates the 0V-15V --> 0V-3.3V --> digital 0-1024
+        #----------------------------------------------------------------------------
+        voltage = self.averaged_sample/66.5
+        return voltage
+    def read_value_text(self, value):
+        if value > float(self.config_info[5].strip()):
+            return ' {0} ({1:2.1f})'.format(self.config_info[6].strip(), value)
+        elif value > float(self.config_info[7].strip()):
+            return ' {0} ({1:2.1f})'.format(self.config_info[8].strip(), value)
+        return ' {0} ({1:2.1f})'.format(self.config_info[9].strip(), value)
+
 class Ph(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Ph, self).__init__(gpio_controller, config_file_data)
@@ -365,6 +385,10 @@ class GpioCtl:
                     parts = line.split(',')
                     # Create High Low water level object and add to  list
                     self.my_gpios.append(HighLowLevel(self, parts))
+                elif 'battery' in line[:7]:
+                    parts = line.split(',')
+                    # Create Battery Charge State object and add to  list
+                    self.my_gpios.append(Battery(self, parts))
                 elif 'ph' in line[:2]:
                     parts = line.split(',')
                     # Create PH object and add to  list
