@@ -4,7 +4,7 @@
 temp,    0,   2,   Water Temp (75-81),    75-82,            10020,        2.4
 temp,    1,  12,   Room Temp,             60-82,            10020,        -0.4 
 ph,      2,   2,   PH,                    7.9-8.5,          -36.23, 21.257
-battery, 3,   4,   Battery Charge,        13.4-15.0,        13.3, Good, 12.9, Fair, Poor
+battery, 3,   4,   Battery Charge,        13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   4,   8,   Algae Scrubber Light,  21:15-09:45=200-1023+10:15-20:45=0-300
 rflow,   5,   8,   Water Movers,          14:20-14:00=10-500, NA, NA
 hilow,   6,   2,   Aquarium Water level,  256-768,          Low, High, Ok  
