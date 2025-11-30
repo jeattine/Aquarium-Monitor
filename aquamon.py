@@ -226,8 +226,8 @@ class TempSensor(GpioAnalog):
 class RandomFlowSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(RandomFlowSensor, self).__init__(gpio_controller, config_file_data, False)
-        # extend the sample buffer from 16 entries to 118 entries
-        self.samples.extend(range(0,1024,10))
+        # set the sample buffer to 128 entries
+        self.samples[:] = list(range(0,1024,8))
 
     def read_value(self):
         # Convert the sample data into a standard deviation
@@ -271,13 +271,14 @@ class HighLowLevel(GpioAnalog):
 class Battery(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Battery, self).__init__(gpio_controller, config_file_data)
+        # initialize the buffer with a value close to what is expected
         self.samples[:] = [910] * 16
 
     def read_value(self):
         # ---------------------------------------------------------------------------
         # Requires the following configuration: 
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
-        # Translates the 0V-15V --> 0V-3.3V --> digital 0-1024
+        # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
         voltage = self.averaged_sample/68.31
         return voltage
@@ -292,8 +293,8 @@ class Ph(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Ph, self).__init__(gpio_controller, config_file_data)
         # This class tracks the max and min values/timestamps and logs PH values every hour
-        # extend the sample buffer from 16 entries to 118 entries
-        self.samples[:] = [472.5] * (len(self.samples) + 20)
+        # set the sample buffer to 36 entries
+        self.samples[:] = [472.5] * 36
         self.min_max_init()
         self.log_stamp = datetime.now().hour
         self.slope = float(self.config_info[5].lstrip())
@@ -543,8 +544,8 @@ class GpioCtl:
         with open(self.stats_file, 'w') as status_file:
             curDateTimeRaw = datetime.now()
             curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
-            status_file.write('Monitor start time: {}\n'.format(self.start_time_str))
             status_file.write('Sample time: {}\n'.format(curDateTime))
+            status_file.write('Monitor start time: {}\n'.format(self.start_time_str))
             for gpio in self.my_gpios:
                 current_value = gpio.test()
                 status_file.write('{0}:{1}\n'.format(gpio.read_label(), gpio.read_value_text(current_value)))
