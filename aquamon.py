@@ -2,6 +2,7 @@
 
 # Script to monitor reef aquarium
 
+import sys
 import os
 import shutil
 import time
@@ -32,6 +33,8 @@ class Gpio:
             if current_value < 0 or self.controller.start_time + timedelta(seconds=90) > datetime.now():
                 return current_value
         self.test_active = True
+        if self.controller.calibrate == True:
+            return current_value
         conditions = self.config_info[4].lstrip().split('+')
         for condition in conditions:
             if ':' in condition:
@@ -271,7 +274,7 @@ class HighLowLevel(GpioAnalog):
 class Battery(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Battery, self).__init__(gpio_controller, config_file_data)
-        # initialize the buffer with a value close to what is expected
+        # initialize buffer with a value close to what is expected
         self.samples[:] = [910] * 16
 
     def read_value(self):
@@ -280,15 +283,20 @@ class Battery(GpioAnalog):
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
         # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
-        voltage = self.averaged_sample/68.31
+        if self.controller.calibrate == False:
+            voltage = self.averaged_sample/68.31
+        else:
+            voltage = self.averaged_sample
+            print('Battery raw digital: {}'.format(voltage))
         return voltage
+        
     def read_value_text(self, value):
         if value > float(self.config_info[5].strip()):
             return ' {0} ({1:2.1f})'.format(self.config_info[6].strip(), value)
         elif value > float(self.config_info[7].strip()):
             return ' {0} ({1:2.1f})'.format(self.config_info[8].strip(), value)
         return ' {0} ({1:2.1f})'.format(self.config_info[9].strip(), value)
-
+            
 class Ph(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Ph, self).__init__(gpio_controller, config_file_data)
@@ -298,7 +306,7 @@ class Ph(GpioAnalog):
         self.min_max_init()
         self.log_stamp = datetime.now().hour
         self.slope = float(self.config_info[5].lstrip())
-        self.offset = float(self.config_info[6].lstrip())      
+        self.offset = float(self.config_info[6].lstrip())
 
     def read_value(self):
         current_day = datetime.now().day
@@ -306,14 +314,18 @@ class Ph(GpioAnalog):
             # Start a new max/min period of recording
             self.min_max_init()
         #print(self.samples)
-        ph = self.averaged_sample / self.slope + self.offset
-        if self.test_active == True:         
-            if ph > self.max_ph:
-                self.max_ph = ph
-                self.max_timestamp = datetime.now()
-            if ph < self.min_ph:
-                self.min_ph = ph
-                self.min_timestamp = datetime.now()
+        if self.controller.calibrate == False:
+            ph = self.averaged_sample / self.slope + self.offset
+            if self.test_active == True:         
+                if ph > self.max_ph:
+                    self.max_ph = ph
+                    self.max_timestamp = datetime.now()
+                if ph < self.min_ph:
+                    self.min_ph = ph
+                    self.min_timestamp = datetime.now()
+        else:
+            ph = self.averaged_sample
+            print('PH raw digital: {}'.format(ph))
         return ph
 
     def min_max_init(self):
@@ -347,6 +359,11 @@ class GpioCtl:
         self.connected = False
         self.start_time = datetime.now()
         self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
+        if len(sys.argv) > 1 and sys.argv[1] == 'Calibrate':
+            self.calibrate = True
+        else:
+            self.calibrate = False
+
         with open('config.txt', 'r') as gpio_config:
             for line in gpio_config:
                 # Start of sensor object instantiations
@@ -443,6 +460,7 @@ class GpioCtl:
         # Connect to the GPIO monitor
         self.connect()
 
+
     def authenticate(self):
         self.tn.read_until('User Name: '.encode(),self.timeout)
         self.tn.write((self.username + '\n').encode())
@@ -506,39 +524,38 @@ class GpioCtl:
             x.read_sensor_and_update()
 
     def send_email_alert(self):
-        if self.email_text:
-            me = self.email_from
-            outer = MIMEMultipart()
-            outer['Subject'] = self.email_subject
-            outer['From'] = me
-            outer['To'] = self.notify
-            # Add the alert message
-            msg = MIMEText("\n".join(self.email_text))
-            outer.attach(msg)
+        me = self.email_from
+        outer = MIMEMultipart()
+        outer['Subject'] = self.email_subject
+        outer['From'] = me
+        outer['To'] = self.notify
+        # Add the alert message
+        msg = MIMEText("\n".join(self.email_text))
+        outer.attach(msg)
 
-            # Attach the current status information
-            with open(self.stats_file, 'r') as sf:
-                contents = sf.read()
-                stats = MIMEText(contents.replace(';', '\n'))
-            outer.attach(stats)
+        # Attach the current status information
+        with open(self.stats_file, 'r') as sf:
+            contents = sf.read()
+            stats = MIMEText(contents.replace(';', '\n'))
+        outer.attach(stats)
 
-            # Add a link to check the current status
-            email_link = MIMEText(self.cloud_store + 'current.txt\n')
-            outer.attach(email_link)
+        # Add a link to check the current status
+        email_link = MIMEText(self.cloud_store + 'current.txt\n')
+        outer.attach(email_link)
       
-            # Send the email
-            try:
-                with smtplib.SMTP(self.smtp, 587) as server:
-                    server.connect(self.smtp, 587)
-                    server.ehlo()
-                    server.starttls()
-                    server.login(me, "abcdefghijklmnop")
-                    recipients = self.notify.split(',')
-                    server.sendmail(me, recipients, outer.as_string())
-            except Exception as error:
-                print("Exception={} Error sending alert!: {}".format(error, msg))
-            # Initialize for next alert
-            self.email_text[:] = []
+        # Send the email
+        try:
+            with smtplib.SMTP(self.smtp, 587) as server:
+                server.connect(self.smtp, 587)
+                server.ehlo()
+                server.starttls()
+                server.login(me, "abcdefghijklmnop")
+                recipients = self.notify.split(',')
+                server.sendmail(me, recipients, outer.as_string())
+        except Exception as error:
+            print("Exception={} Error sending alert!: {}".format(error, msg))
+        # Initialize for next alert
+        self.email_text[:] = []
 
     def test_and_report(self):
         with open(self.stats_file, 'w') as status_file:
@@ -561,7 +578,8 @@ class GpioCtl:
                 shutil.copyfile(self.stats_file, self.cloud_store + 'current.txt')
             except Exception as error:
                 print("Exception={} Error updating cloud drive!".format(error))
-        self.send_email_alert()
+        if self.email_text:
+            self.send_email_alert()
 
 def main():
     controller = GpioCtl()
