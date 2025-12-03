@@ -283,11 +283,10 @@ class Battery(GpioAnalog):
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
         # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
-        if self.controller.calibrate == False:
-            voltage = self.averaged_sample/68.31
-        else:
-            voltage = self.averaged_sample
-            print('Battery raw digital: {}'.format(voltage))
+        if self.controller.calibrate == True:
+            print('Battery raw digital: {}'.format(self.averaged_sample))
+            return self.averaged_sample
+        voltage = self.averaged_sample/68.31
         return voltage
         
     def read_value_text(self, value):
@@ -314,18 +313,17 @@ class Ph(GpioAnalog):
             # Start a new max/min period of recording
             self.min_max_init()
         #print(self.samples)
-        if self.controller.calibrate == False:
-            ph = self.averaged_sample / self.slope + self.offset
-            if self.test_active == True:         
-                if ph > self.max_ph:
-                    self.max_ph = ph
-                    self.max_timestamp = datetime.now()
-                if ph < self.min_ph:
-                    self.min_ph = ph
-                    self.min_timestamp = datetime.now()
-        else:
-            ph = self.averaged_sample
-            print('PH raw digital: {}'.format(ph))
+        if self.controller.calibrate == True:
+            print('PH raw digitial: {}'.format(self.averaged_sample))
+            return self.averaged_sample
+        ph = self.averaged_sample / self.slope + self.offset
+        if self.test_active == True:         
+            if ph > self.max_ph:
+                self.max_ph = ph
+                self.max_timestamp = datetime.now()
+            if ph < self.min_ph:
+                self.min_ph = ph
+                self.min_timestamp = datetime.now()
         return ph
 
     def min_max_init(self):
