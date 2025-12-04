@@ -1,3 +1,13 @@
+#
+# Script to generate calibration values for the Aquarium Monitor
+#
+# Follow the prompts to enter 3 or more coordinates where: 
+#    x = (PH of the calibration solution)
+#    y = (digital value read from the gpio device)
+#
+# Because our aquarium is expected to be between 8.0 - 8.5, the calibration
+# solutions used should span a range before and after these values.
+#
 import sys
 import numpy as np
 
@@ -38,7 +48,6 @@ def calculate_slope_and_offset(coords):
         return None, None
 
 def main(): 
-    inputdata = True
     coordinates = list()
     counter = 1
     while True:
