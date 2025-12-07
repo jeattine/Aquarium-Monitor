@@ -58,13 +58,13 @@ def main():
                     break
                 print('Coordinate {}: {}'.format(counter, coordinate))
                 while True:
-                    proceed = input("Type (R) to re-enter.  Enter to proceed: ")
+                    proceed = input("Type (R) to re-enter coordinate or press Enter to proceed to next coordinate: ")
                     if proceed == "" or proceed == 'R' or proceed == 'r':
                         break
                 if proceed == "":
                     break
             x_y_str = coordinate.split(',')      
-            x_y = [int(x_y_str[0]), int(x_y_str[1])]
+            x_y = [float(x_y_str[0]), float(x_y_str[1])]
             coordinates.append(x_y)
             counter += 1
         except  ValueError:
