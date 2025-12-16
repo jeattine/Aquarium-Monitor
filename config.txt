@@ -3,23 +3,24 @@
 #------------------------------------------------------------------------------------
 temp,    0,   2,   Water Temp (75-81),    75-82,            10020,        2.4
 temp,    1,  12,   Room Temp,             60-82,            10020,        -0.4 
-ph,      2,   2,   PH,                    7.9-8.5,          -36.23, 21.257
-battery, 3,   4,   Battery Charge,        13.2-15.0,        13.2, Good, 12.9, Fair, Poor
+ph,      2,   2,   PH,                    7.8-8.5,          -32.876, 22.2366
+battery, 3,   8,   Battery Charge,        13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   4,   8,   Algae Scrubber Light,  21:15-09:45=200-1023+10:15-20:45=0-300
-rflow,   5,   8,   Water Movers,          14:20-14:00=10-500, NA, NA
-hilow,   6,   2,   Aquarium Water level,  256-768,          Low, High, Ok  
+rflow,   5,   1,   Water Movers,          14:20-14:00=10-500, NA, NA
+hilow,   6,   2,   Aquarium Water level,  256-768,          Low, High, Ok
 light,   7,   1,   Main Light,            09:10-20:00=500-1023+21:40-08:00=0-500
 hilow,   8,   1,   Sump Water Level,      256-768,          Low, High, Ok
 gpiod,   9,   2,   Return Pump Flow,      0,                Running, Shutdown
-gpiod,   A,   8,   Overflow box level,    1,                High, Ok
+gpiod,   A,   4,   Overflow box level,    1,                High, Ok
 gpiod,   B,   2,   Conditional Power,     0,                On, Off
 gpiod,   C,   8,   Protein Skimmer,       1,                Full, Ok
-gpiod,   D,   8,   Top-off reservoir,     0,                Ok,  Low
-gpiod,   E,   8,   Floor,                 1,                Wet, Dry
+gpiod,   D,   4,   Top-off reservoir,     0,                Ok,  Low
+floor,   E,   2,   Floor,                 1,                Wet, Dry
 #gpiod,  F,   8,   (unused),              0,                NA, NA
 #
 # Notes: 1. Gpio's 0,1 are wired special for temperature sensing:
-#             GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input 
+#           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input 
+#           All other inputs are wired with a 10K pull-up resistor
 #           Gpio's 2,3 do not have a pullup resistor. Used for external voltage measurement
 #			Gpio's 4 thru F have a 10K pullup resistor
 #        2. Gpio's A-F cannot be configured as an analog input. Only digital.
@@ -52,6 +53,8 @@ email_subject=Alert from MyAquariumName aquarium
 # From address to show up in the alert email
 email_from=aquarium_email_address@gmail.com
 # Local file location to store intermediate status information prior to output
-stats_file=C:/Users/XXXX/aquamon_stats/current.txt
+stats_file=aquamon_stats/current.txt
 # cloud storage location to write the status file. Let the OS sync it externally
-cloud_store=C:/Users/XXXX/OneDrive/Aquarium/aquamonitor/status/
+cloud_store=OneDrive/Aquarium/aquamonitor/status/
+# Local path to access local stats file and the cloud storage folder
+local_filepath=C:/Users/me

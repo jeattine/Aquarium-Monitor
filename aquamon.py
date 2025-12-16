@@ -300,12 +300,12 @@ class Ph(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Ph, self).__init__(gpio_controller, config_file_data)
         # This class tracks the max and min values/timestamps and logs PH values every hour
-        # set the sample buffer to 36 entries
-        self.samples[:] = [472.5] * 36
+        self.slope = float(self.config_info[5].lstrip())
+        self.offset = float(self.config_info[6].lstrip())     
+        # set the sample buffer to 36 entries,initialized at a ph of 8.
+        self.samples[:] = [(8 - self.offset) * self.slope] * 36
         self.min_max_init()
         self.log_stamp = datetime.now().hour
-        self.slope = float(self.config_info[5].lstrip())
-        self.offset = float(self.config_info[6].lstrip())
 
     def read_value(self):
         current_day = datetime.now().day
@@ -337,7 +337,7 @@ class Ph(GpioAnalog):
         current_hour = datetime.now().hour
         if current_hour != self.log_stamp:
             # write current datetime and PH value into the log file
-            with open(self.controller.cloud_store + 'phlog.txt', 'a') as ph_log:
+            with open(self.controller.local_filepath + self.controller.cloud_store + 'phlog.txt', 'a') as ph_log:
                 curDateTimeRaw = datetime.now()
                 curDateTime = curDateTimeRaw.strftime("%Y-%m-%d %H:%M:%S")
                 ph_log.write('{0},{1:2.1f}\n'.format(curDateTime, value))
@@ -452,6 +452,9 @@ class GpioCtl:
                 elif 'cloud_store' in line[:11]:
                     parts = line.split('=')
                     self.cloud_store = parts[1].rstrip()
+                elif 'local_filepath' in line[:14]:
+                    parts = line.split('=')
+                    self.local_filepath = parts[1].rstrip()
 
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
@@ -532,7 +535,7 @@ class GpioCtl:
         outer.attach(msg)
 
         # Attach the current status information
-        with open(self.stats_file, 'r') as sf:
+        with open(self.local_filepath + self.stats_file, 'r') as sf:
             contents = sf.read()
             stats = MIMEText(contents.replace(';', '\n'))
         outer.attach(stats)
@@ -556,7 +559,7 @@ class GpioCtl:
         self.email_text[:] = []
 
     def test_and_report(self):
-        with open(self.stats_file, 'w') as status_file:
+        with open(self.local_filepath + self.stats_file, 'w') as status_file:
             curDateTimeRaw = datetime.now()
             curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
             status_file.write('Sample time: {}\n'.format(curDateTime))
@@ -573,7 +576,7 @@ class GpioCtl:
         if (self.report_calls * self.sample_time) > self.server_update_freq:
             self.report_calls = 0
             try:
-                shutil.copyfile(self.stats_file, self.cloud_store + 'current.txt')
+                shutil.copyfile(self.local_filepath + self.stats_file, self.local_filepath + self.cloud_store + 'current.txt')
             except Exception as error:
                 print("Exception={} Error updating cloud drive!".format(error))
         if self.email_text:
