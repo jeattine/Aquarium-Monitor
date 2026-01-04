@@ -469,7 +469,7 @@ class GpioCtl:
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
         outer['From'] = me
-        outer['To'] = self.notify
+        outer['To'] = ','.join(recipients)
         # Add the alert message
         msg = MIMEText("\n".join(self.email_text))
         outer.attach(msg)
