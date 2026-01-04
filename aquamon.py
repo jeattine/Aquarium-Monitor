@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import timedelta, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from collections import deque
 
 class Gpio:
     def __init__(self, gpio_controller, config_file_data):
@@ -62,29 +63,20 @@ class Gpio:
                         self.controller.email_text.append('{} Alert!\n'.format(self.read_label()))
                         self.last_sent_alert = datetime.now()
                         # force a server update prior to sending the alarm
-                        self.controller.report_calls = self.controller.server_update_freq / self.controller.sample_time
+                        self.controller.report_calls = int(self.controller.server_update_freq) / int(self.controller.sample_time)
 
         return current_value
 
     def in_time_range(self, time_start, time_end):
-        startTime = datetime.strptime(time_start,"%H:%M")
-        endTime = datetime.strptime(time_end,"%H:%M")
-        if startTime > endTime:
-            endAdjust = 1
-        else:
-            endAdjust = 0
-        curDateTime = datetime.now();
-        tomorrowDateTime = curDateTime + timedelta(days=1)
-        startDateTime = datetime.combine(curDateTime.date(), startTime.time())
-        endDateTime = datetime.combine(curDateTime.date(), endTime.time()) + timedelta(days=endAdjust)
-        if startDateTime < curDateTime < endDateTime:
-            inTimeRange = 1
-        elif startDateTime < tomorrowDateTime < endDateTime:
-            inTimeRange = 1
-        else:
-            inTimeRange = 0
-        return inTimeRange
-
+        now = datetime.now().time()
+        start = datetime.strptime(time_start, "%H:%M").time()
+        end = datetime.strptime(time_end, "%H:%M").time()
+    
+        if start <= end:
+            return start <= now <= end
+        else: # Overnights (e.g., 22:00 to 02:00)
+            return now >= start or now <= end
+		
     def read_label(self):
         return self.config_info[3].lstrip()
         
@@ -98,7 +90,9 @@ class GpioAnalog(Gpio):
         self.averaged_sample = -1.0
         self.enable_averaging = enable_averaging
         # create a 16 entry buffer with values spanning the 10 bit A/D converter range
-        self.samples= list(range(0,1024,64))
+        # Initialize a deque with a fixed maximum length.
+        # This replaces manual slicing [1:]
+        self.samples = deque(range(0, 1024, 64), maxlen=16)
 
     def read_value(self):
         return self.averaged_sample
@@ -110,12 +104,13 @@ class GpioAnalog(Gpio):
         return '{0:6.1f}'.format(value)
 
     def read_sensor_and_update(self):
-        self.samples = self.samples[1:]
-        self.samples.append(self.controller.read_analog(self.config_info[1].lstrip()))
+         # Simply append; the oldest value is dropped automatically  
+        new_val = self.controller.read_analog(self.config_info[1].lstrip())
+        self.samples.append(new_val)
         # Create a running averaged sample dumping the 1/4th highest and 1/4th lowest samples
         if self.enable_averaging == True:
-            temp_samples = self.samples[:]
-            temp_samples.sort()
+            temp_samples = sorted(list(self.samples))
+            # Trim 25% lowest and 25% highest
             trim_low = int(len(temp_samples)/4)
             trim_high = int(len(temp_samples)) - trim_low
             temp_samples = temp_samples[trim_low:trim_high]
@@ -230,7 +225,7 @@ class RandomFlowSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(RandomFlowSensor, self).__init__(gpio_controller, config_file_data, False)
         # set the sample buffer to 128 entries
-        self.samples[:] = list(range(0,1024,8))
+        self.samples = deque(range(0,1024,8), maxlen=128)
 
     def read_value(self):
         # Convert the sample data into a standard deviation
@@ -275,7 +270,7 @@ class Battery(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(Battery, self).__init__(gpio_controller, config_file_data)
         # initialize buffer with a value close to what is expected
-        self.samples[:] = [910] * 16
+        self.samples = deque([910] * 16, maxlen=16)
 
     def read_value(self):
         # ---------------------------------------------------------------------------
@@ -303,7 +298,7 @@ class Ph(GpioAnalog):
         self.slope = float(self.config_info[5].lstrip())
         self.offset = float(self.config_info[6].lstrip())     
         # set the sample buffer to 36 entries,initialized at a ph of 8.
-        self.samples[:] = [(8 - self.offset) * self.slope] * 36
+        self.samples = deque([(8 - self.offset) * self.slope] * 36, maxlen=36)
         self.min_max_init()
         self.log_stamp = datetime.now().hour
 
@@ -349,123 +344,66 @@ class Ph(GpioAnalog):
         max_ts = self.max_timestamp.strftime("%I:%M %p")
         return '{0:2.1f}  max:{1:3.1f} at {2}  min:{3:3.1f} at {4}'.format(value, self.max_ph, max_ts, self.min_ph, min_ts)
 
+
 class GpioCtl:
     def __init__(self):
-        # List of gpio objects indexed by gpio number
         self.my_gpios = []
         self.email_text = [] 
         self.connected = False
         self.start_time = datetime.now()
         self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
-        if len(sys.argv) > 1 and sys.argv[1] == 'Calibrate':
-            self.calibrate = True
-        else:
-            self.calibrate = False
+        
+        # Mapping config keys to Class names
+        self.SENSOR_MAP = {
+            'gpioa': GpioAnalog,
+            'gpiod': GpioDigital,
+            'temp': TempSensor,
+            'rflow': RandomFlowSensor,
+            'flow': FlowSensorFX4,
+            'light': LightSensor,
+            'floor': FloorWetSensor,
+            'co2': CO2deliverySensor,
+            'hilow': HighLowLevel,
+            'battery': Battery,
+            'ph': Ph
+        }
 
-        with open('config.txt', 'r') as gpio_config:
-            for line in gpio_config:
-                # Start of sensor object instantiations
-                if 'gpioa' in line[:5]:
-                    parts = line.split(',')
-                    # Create analog gpio object and add to  list
-                    self.my_gpios.append(GpioAnalog(self, parts))
-                elif 'gpiod' in line[:5]:
-                    parts = line.split(',')
-                    # Create digital gpio object and add to  list
-                    self.my_gpios.append(GpioDigital(self, parts))
-                elif 'temp' in line[:4]:
-                    parts = line.split(',')
-                    # Create temperature object and add to  list
-                    self.my_gpios.append(TempSensor(self, parts))
-                elif 'rflow' in line[:5]:
-                    parts = line.split(',')
-                    # Create flow object and add to  list
-                    self.my_gpios.append(RandomFlowSensor(self, parts))
-                elif 'flow' in line[:4]:
-                    parts = line.split(',')
-                    # Create flow object and add to  list
-                    self.my_gpios.append(FlowSensorFX4(self, parts))
-                elif 'light' in line[:5]:
-                    parts = line.split(',')
-                    # Create light object and add to  list
-                    self.my_gpios.append(LightSensor(self, parts))
-                elif 'floor' in line[:5]:
-                    parts = line.split(',')
-                    # Create floor wet object and add to  list
-                    self.my_gpios.append(FloorWetSensor(self, parts))
-                elif 'co2' in line[:3]:
-                    parts = line.split(',')
-                    # Create CO2 delivery object and add to  list
-                    self.my_gpios.append(CO2deliverySensor(self, parts))
-                elif 'hilow' in line[:5]:
-                    parts = line.split(',')
-                    # Create High Low water level object and add to  list
-                    self.my_gpios.append(HighLowLevel(self, parts))
-                elif 'battery' in line[:7]:
-                    parts = line.split(',')
-                    # Create Battery Charge State object and add to  list
-                    self.my_gpios.append(Battery(self, parts))
-                elif 'ph' in line[:2]:
-                    parts = line.split(',')
-                    # Create PH object and add to  list
-                    self.my_gpios.append(Ph(self, parts))
-                # End of Sensor Object instantiations
-                elif 'username' in line[:8]:
-                    parts = line.split('=')
-                    self.username = parts[1].rstrip()
-                elif 'password' in line[:8]:
-                    parts = line.split('=')
-                    self.password = parts[1].rstrip()
-                elif 'tcpip' in line[:5]:
-                    parts = line.split('=')
-                    self.tcp_addr = parts[1].rstrip()
-                elif 'smtp' in line[:4]:
-                    parts = line.split('=')
-                    self.smtp = parts[1].rstrip()
-                elif 'notify' in line[:6]:
-                    parts = line.split('=')
-                    self.notify = parts[1].rstrip()
-                elif 'stats_file' in line[:10]:
-                    parts = line.split('=')
-                    self.stats_file = parts[1].rstrip()
-                elif 'connect_timeout' in line[:15]:
-                    parts = line.split('=')
-                    self.timeout = int(parts[1].rstrip())
-                elif 'reconnect_delay' in line[:15]:
-                    parts = line.split('=')
-                    self.reconnect_delay = int(parts[1].rstrip())
-                elif 'reconnect_attempts' in line[:18]:
-                    parts = line.split('=')
-                    self.reconnect_attempts = int(parts[1].rstrip())
-                elif 'server_update_freq' in line[:18]:
-                    parts = line.split('=')
-                    self.server_update_freq = int(parts[1].rstrip())
-                elif 'sample_time' in line[:11]:
-                    parts = line.split('=')
-                    self.sample_time = int(parts[1].rstrip())                  
-                elif 'email_subject' in line[:13]:
-                    parts = line.split('=')
-                    self.email_subject = parts[1].rstrip()
-                elif 'email_from' in line[:10]:
-                    parts = line.split('=')
-                    self.email_from = parts[1].rstrip()
-                elif 'cloud_store' in line[:11]:
-                    parts = line.split('=')
-                    self.cloud_store = parts[1].rstrip()
-                elif 'local_filepath' in line[:14]:
-                    parts = line.split('=')
-                    self.local_filepath = parts[1].rstrip()
-
+        self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
+        self.load_config('config.txt')
         # Initialize reported calls to force a server update at startup
-        self.report_calls = self.server_update_freq / self.sample_time
+        self.report_calls = int(self.server_update_freq) / int(self.sample_time)
         # Connect to the GPIO monitor
         self.connect()
 
+    def load_config(self, filename):
+        with open(filename, 'r') as gpio_config:
+            for line in gpio_config:
+                line = line.strip()
+                if not line or line[0] == '#' or '=' in line:
+                    # Handle global settings (username, password, etc.)
+                    if '=' in line:
+                        self.parse_setting(line)
+                    continue
+                
+                # Handle sensor instantiations
+                parts = line.split(',')
+                prefix = parts[0].lower()
+                
+                # Check if the prefix matches one of our known sensor types
+                for key, sensor_class in self.SENSOR_MAP.items():
+                    if prefix.startswith(key):
+                        self.my_gpios.append(sensor_class(self, parts))
+                        break
+
+    def parse_setting(self, line):
+        key, value = line.split('=', 1)
+        # Use setattr to dynamically assign properties to the class instance
+        setattr(self, key.strip(), value.strip())
 
     def authenticate(self):
-        self.tn.read_until('User Name: '.encode(),self.timeout)
+        self.tn.read_until('User Name: '.encode(),int(self.connect_timeout))
         self.tn.write((self.username + '\n').encode())
-        self.tn.read_until('Password: '.encode(), self.timeout)
+        self.tn.read_until('Password: '.encode(), int(self.connect_timeout))
         self.tn.write((self.password  + '\n').encode())
         print((self.tn.read_until('>>'.encode())).decode())
         self.connected = True
@@ -476,10 +414,10 @@ class GpioCtl:
 
     def attempt_reconnect(self):
         attempt = 1
-        while attempt < self.reconnect_attempts:
+        while attempt < int(self.reconnect_attempts):
             dt_string = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
             print("{} Attempt reconnect in {} seconds...".format(dt_string, self.reconnect_delay))
-            time.sleep(self.reconnect_delay)
+            time.sleep(int(self.reconnect_delay))
             try:
                 self.tn.open(self.tcp_addr)
                 self.authenticate()
@@ -504,7 +442,7 @@ class GpioCtl:
         while True:
             try:
                 self.tn.write((read_type + ' {} \n'.format(gpio_num)).encode())
-                result = self.tn.read_until('>'.encode(), self.timeout).decode()
+                result = self.tn.read_until('>'.encode(), int(self.connect_timeout)).decode()
                 rtn_int = int(result.split()[0])
                 break
             except Exception as error:
@@ -525,7 +463,9 @@ class GpioCtl:
             x.read_sensor_and_update()
 
     def send_email_alert(self):
-        me = self.email_from
+        me = os.environ.get('AQUAMON_EMAIL')
+        password = os.environ.get('AQUAMON_EMAIL_PW')
+        recipients = os.environ.get('AQUAMON_RECIPIENTS').split(',')
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
         outer['From'] = me
@@ -535,7 +475,7 @@ class GpioCtl:
         outer.attach(msg)
 
         # Attach the current status information
-        with open(self.local_filepath + self.stats_file, 'r') as sf:
+        with open(self.local_filepath + self.cloud_store + 'current.txt', 'r') as sf:
             contents = sf.read()
             stats = MIMEText(contents.replace(';', '\n'))
         outer.attach(stats)
@@ -550,8 +490,7 @@ class GpioCtl:
                 server.connect(self.smtp, 587)
                 server.ehlo()
                 server.starttls()
-                server.login(me, "abcdefghijklmnop")
-                recipients = self.notify.split(',')
+                server.login(me, password)
                 server.sendmail(me, recipients, outer.as_string())
         except Exception as error:
             print("Exception={} Error sending alert!: {}".format(error, msg))
@@ -559,26 +498,22 @@ class GpioCtl:
         self.email_text[:] = []
 
     def test_and_report(self):
-        with open(self.local_filepath + self.stats_file, 'w') as status_file:
-            curDateTimeRaw = datetime.now()
-            curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
-            status_file.write('Sample time: {}\n'.format(curDateTime))
-            status_file.write('Monitor start time: {}\n'.format(self.start_time_str))
-            for gpio in self.my_gpios:
-                current_value = gpio.test()
-                status_file.write('{0}:{1}\n'.format(gpio.read_label(), gpio.read_value_text(current_value)))
-                try:
-                    gpio.log(current_value)
-                except Exception as logerr:
-                    print("Exception={} Error making log entry for {}!".format(logerr,gpio.read_label()))
         # store the status file to the cloud drive based on the update frequency
         self.report_calls += 1
-        if (self.report_calls * self.sample_time) > self.server_update_freq:
+        if (self.report_calls * int(self.sample_time)) > int(self.server_update_freq) or self.email_text:
             self.report_calls = 0
-            try:
-                shutil.copyfile(self.local_filepath + self.stats_file, self.local_filepath + self.cloud_store + 'current.txt')
-            except Exception as error:
-                print("Exception={} Error updating cloud drive!".format(error))
+            with open(self.local_filepath + self.cloud_store + 'current.txt', 'w') as status_file:
+                curDateTimeRaw = datetime.now()
+                curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
+                status_file.write('Sample time: {}\n'.format(curDateTime))
+                status_file.write('Monitor start time: {}\n'.format(self.start_time_str))
+                for gpio in self.my_gpios:
+                    current_value = gpio.test()
+                    status_file.write('{0}:{1}\n'.format(gpio.read_label(), gpio.read_value_text(current_value)))
+                    try:
+                        gpio.log(current_value)
+                    except Exception as logerr:
+                        print("Exception={} Error making log entry for {}!".format(logerr,gpio.read_label()))
         if self.email_text:
             self.send_email_alert()
 
@@ -588,7 +523,7 @@ def main():
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            time.sleep(controller.sample_time)
+            time.sleep(int(controller.sample_time))
         except KeyboardInterrupt:
             print("User requested termination. Exiting.")
             break

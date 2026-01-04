@@ -19,42 +19,47 @@ floor,   E,   2,   Floor,                 1,                Wet, Dry
 #gpiod,  F,   8,   (unused),              0,                NA, NA
 #
 # Notes: 1. Gpio's 0,1 are wired special for temperature sensing:
-#           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input 
+#           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
+#           Gpio's 2,3 do not have pull-up resistors. Used for ext voltage sensing
 #           All other inputs are wired with a 10K pull-up resistor
-#           Gpio's 2,3 do not have a pullup resistor. Used for external voltage measurement
-#			Gpio's 4 thru F have a 10K pullup resistor
-#        2. Gpio's A-F cannot be configured as an analog input. Only digital.
+#        2. Gpio's A-F cannot be configured as an analog interface
 #        3. 'Nag' is the number of hours before sending another alert for 
 #           a specific GPIO condition violation that has not cleared.
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
 #------------------------------------------------------------------------------------
-# telnet userid and password of the GPIO device
+# userid of the local GPIO device
 username=admin
+# password of the local GPIO device
 password=admin
-# local ip address of the GPIO device
-tcpip=192.168.1.103
-# seconds to wait for a telnet command response
+# local network address of the GPIO device
+tcp_addr=192.168.1.103
+# seconds to wait for a responses from the GPIO device
 connect_timeout=6
-# seconds to wait before attempting a reconnect after a disconnect
+# seconds to wait before attempting a reconnect
 reconnect_delay=120
-# how many times to attempt a reconnect
+# number of times to attempt a reconnect before exiting
 reconnect_attempts=60
-# how many seconds between writing the status out to the cloud file system
+# seconds between updates of the cloud-based status file
 server_update_freq=60
-# how many seconds between sampling of the GPIO inputs
+# seconds between sampling the GPIO device inputs
 sample_time=4
-# send email server name
+# smtp server to use for sending alerts
 smtp=smtp.gmail.com
-# address to notify of an alert. Comma separated multiple emails supported
-notify=my_email_address@gmail.com
-# Subject line in the alert email
-email_subject=Alert from MyAquariumName aquarium
-# From address to show up in the alert email
-email_from=aquarium_email_address@gmail.com
-# Local file location to store intermediate status information prior to output
-stats_file=aquamon_stats/current.txt
-# cloud storage location to write the status file. Let the OS sync it externally
+# subject line in the alert email
+email_subject=Alert from Attinella aquarium
+# directory of the cloud storage
 cloud_store=OneDrive/Aquarium/aquamonitor/status/
-# Local path to access local stats file and the cloud storage folder
-local_filepath=C:/Users/me
+# local filepath to reach local synchronized copy of cloud storage
+local_filepath=C:/Users/johna/
+#--------------------------------------------------------------------------------
+#  Expected Environment Variables
+#--------------------------------------------------------------------------------
+#  AQUAMON_EMAIL: The 'from' address of the alert email sent by the monitor
+#  AQUAMON_EMAIL_PW: The SMTP password for sending the alert email
+#  AQUAMON_RECIPIENTS: Comma separated email list to be sent alerts 
+
+
+
+
+
