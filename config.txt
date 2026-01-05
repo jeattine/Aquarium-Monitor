@@ -28,11 +28,11 @@ floor,   E,   2,   Floor,                 1,                Wet, Dry
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
 #------------------------------------------------------------------------------------
-# userid of the local GPIO device
+# userid of GPIO device on the local network
 username=admin
-# password of the local GPIO device
+# password of the GPIO device on the local network
 password=admin
-# local network address of the GPIO device
+# address of the GPIO device on the local network
 tcp_addr=192.168.1.103
 # seconds to wait for a responses from the GPIO device
 connect_timeout=6

@@ -9,6 +9,7 @@ import time
 import telnetlib
 import math
 import smtplib
+import statistics
 from pathlib import Path
 from datetime import timedelta, datetime
 from email.mime.multipart import MIMEMultipart
@@ -20,8 +21,8 @@ class Gpio:
         self.controller = gpio_controller
         self.config_info = config_file_data
         # Initialize very old time
-        self.last_sent_alert = datetime.now() - timedelta(days=356)
-        self.nag_level = self.config_info[2].lstrip()
+        self.last_sent_alert = datetime.now() - timedelta(days=365)
+        self.nag_level = int(self.config_info[2].lstrip())
         self.test_active = False
 
     def read_value(self):
@@ -30,11 +31,11 @@ class Gpio:
 
     def test(self):
         current_value = self.read_value()
-        if self.test_active == False:
+        if not self.test_active:
             if current_value < 0 or self.controller.start_time + timedelta(seconds=90) > datetime.now():
                 return current_value
         self.test_active = True
-        if self.controller.calibrate == True:
+        if self.controller.calibrate:
             return current_value
         conditions = self.config_info[4].lstrip().split('+')
         for condition in conditions:
@@ -59,11 +60,11 @@ class Gpio:
                 if current_value < float(value_low) or current_value > float(value_high):
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
-                    if (self.last_sent_alert + timedelta(hours=int(self.nag_level))) < datetime.now():
+                    if (self.last_sent_alert + timedelta(hours=self.nag_level)) < datetime.now():
                         self.controller.email_text.append('{} Alert!\n'.format(self.read_label()))
                         self.last_sent_alert = datetime.now()
                         # force a server update prior to sending the alarm
-                        self.controller.report_calls = int(self.controller.server_update_freq) / int(self.controller.sample_time)
+                        self.controller.report_calls = self.controller.server_update_freq / self.controller.sample_time
 
         return current_value
 
@@ -108,7 +109,7 @@ class GpioAnalog(Gpio):
         new_val = self.controller.read_analog(self.config_info[1].lstrip())
         self.samples.append(new_val)
         # Create a running averaged sample dumping the 1/4th highest and 1/4th lowest samples
-        if self.enable_averaging == True:
+        if self.enable_averaging:
             temp_samples = sorted(list(self.samples))
             # Trim 25% lowest and 25% highest
             trim_low = int(len(temp_samples)/4)
@@ -210,8 +211,9 @@ class TempSensor(GpioAnalog):
         #    Temperature in Kelvin = 1 / {A + B[ln(R)] + C[ln(R)]^3}
         #    where A = 0.001129148, B = 0.000234125 and C = 8.76741E-08
         #**************************************************************
-        temp = math.log(resistance)
-        temp = 1 / (0.001129148 + (0.000234125 * temp) + (0.0000000876741 * temp * temp * temp))
+        ln_r = math.log(resistance)
+        A, B, C = 1.129148e-3, 2.34125e-4, 8.76741e-8
+        temp = 1 / (A + B * ln_r + C * math.pow(ln_r, 3))
         #Convert from Kelvin the Celsius
         temp = temp - 273.15
         # Convert to Fahrenheit.
@@ -229,12 +231,7 @@ class RandomFlowSensor(GpioAnalog):
 
     def read_value(self):
         # Convert the sample data into a standard deviation
-        mean = sum(self.samples) / len(self.samples)
-        sumOfSquares = 0.0
-        for sample in self.samples:
-            sumOfSquares += pow((sample - mean), 2)
-        std_dev = math.sqrt(sumOfSquares / len(self.samples))
-        return std_dev
+        return statistics.stdev(self.samples)
 
 class FlowSensorFX4(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
@@ -278,7 +275,7 @@ class Battery(GpioAnalog):
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
         # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
-        if self.controller.calibrate == True:
+        if self.controller.calibrate:
             print('Battery raw digital: {}'.format(self.averaged_sample))
             return self.averaged_sample
         voltage = self.averaged_sample/68.31
@@ -308,11 +305,11 @@ class Ph(GpioAnalog):
             # Start a new max/min period of recording
             self.min_max_init()
         #print(self.samples)
-        if self.controller.calibrate == True:
+        if self.controller.calibrate:
             print('PH raw digitial: {}'.format(self.averaged_sample))
             return self.averaged_sample
         ph = self.averaged_sample / self.slope + self.offset
-        if self.test_active == True:         
+        if self.test_active:         
             if ph > self.max_ph:
                 self.max_ph = ph
                 self.max_timestamp = datetime.now()
@@ -350,6 +347,7 @@ class GpioCtl:
         self.my_gpios = []
         self.email_text = [] 
         self.connected = False
+        self.settings_found = []
         self.start_time = datetime.now()
         self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
         
@@ -367,11 +365,29 @@ class GpioCtl:
             'battery': Battery,
             'ph': Ph
         }
+        # Global integer settings
+        self.global_integers = [
+            'connect_timeout',
+            'reconnect_delay',
+            'reconnect_attempts',
+            'server_update_freq',
+            'sample_time'
+        ]  
+        # All required global settings
+        self.global_settings = self.global_integers + [
+            'username',
+            'password',
+            'tcp_addr',
+            'smtp',
+            'email_subject',
+            'cloud_store',
+            'local_filepath'
+        ]           
 
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
         self.load_config('config.txt')
         # Initialize reported calls to force a server update at startup
-        self.report_calls = int(self.server_update_freq) / int(self.sample_time)
+        self.report_calls = self.server_update_freq / self.sample_time
         # Connect to the GPIO monitor
         self.connect()
 
@@ -394,16 +410,28 @@ class GpioCtl:
                     if prefix.startswith(key):
                         self.my_gpios.append(sensor_class(self, parts))
                         break
+            self.missing_settings = list(set(self.global_settings) - set(self.settings_found))
+            if self.missing_settings:
+                sys.exit("Missing specifications in config.txt file: {}".format(self.missing_settings))
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
         # Use setattr to dynamically assign properties to the class instance
-        setattr(self, key.strip(), value.strip())
+        if key.strip() in self.global_integers:
+            try:
+                value_int = int(value.strip())
+            except Exception as error:
+                sys.exit("Specified value for {} must be an integer!".format(key.strip()))
+            setattr(self, key.strip(), value_int)
+        else:
+            setattr(self, key.strip(), value.strip())
+        if key.strip() in self.global_settings:
+            self.settings_found.append(key.strip())
 
     def authenticate(self):
-        self.tn.read_until('User Name: '.encode(),int(self.connect_timeout))
+        self.tn.read_until('User Name: '.encode(),self.connect_timeout)
         self.tn.write((self.username + '\n').encode())
-        self.tn.read_until('Password: '.encode(), int(self.connect_timeout))
+        self.tn.read_until('Password: '.encode(), self.connect_timeout)
         self.tn.write((self.password  + '\n').encode())
         print((self.tn.read_until('>>'.encode())).decode())
         self.connected = True
@@ -414,10 +442,10 @@ class GpioCtl:
 
     def attempt_reconnect(self):
         attempt = 1
-        while attempt < int(self.reconnect_attempts):
+        while attempt < self.reconnect_attempts:
             dt_string = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
             print("{} Attempt reconnect in {} seconds...".format(dt_string, self.reconnect_delay))
-            time.sleep(int(self.reconnect_delay))
+            time.sleep(self.reconnect_delay)
             try:
                 self.tn.open(self.tcp_addr)
                 self.authenticate()
@@ -425,11 +453,11 @@ class GpioCtl:
             except Exception as error:
                 print("Attempt number {} failed".format(attempt))
                 attempt += 1
+                self.tn.close()
+                self.connected = False
                 if attempt == self.reconnect_attempts:
                     print("Could not reconnect after {} attempts Terminating.".format(attempt))
                     raise
-                self.tn.close()
-                self.connected = False
         print("Successfully reconnected after {} attempts :)".format(attempt))
 
     def disconnect(self):
@@ -442,7 +470,7 @@ class GpioCtl:
         while True:
             try:
                 self.tn.write((read_type + ' {} \n'.format(gpio_num)).encode())
-                result = self.tn.read_until('>'.encode(), int(self.connect_timeout)).decode()
+                result = self.tn.read_until('>'.encode(), self.connect_timeout).decode()
                 rtn_int = int(result.split()[0])
                 break
             except Exception as error:
@@ -487,7 +515,6 @@ class GpioCtl:
         # Send the email
         try:
             with smtplib.SMTP(self.smtp, 587) as server:
-                server.connect(self.smtp, 587)
                 server.ehlo()
                 server.starttls()
                 server.login(me, password)
@@ -500,7 +527,7 @@ class GpioCtl:
     def test_and_report(self):
         # store the status file to the cloud drive based on the update frequency
         self.report_calls += 1
-        if (self.report_calls * int(self.sample_time)) > int(self.server_update_freq) or self.email_text:
+        if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
             with open(self.local_filepath + self.cloud_store + 'current.txt', 'w') as status_file:
                 curDateTimeRaw = datetime.now()
@@ -523,7 +550,7 @@ def main():
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            time.sleep(int(controller.sample_time))
+            time.sleep(controller.sample_time)
         except KeyboardInterrupt:
             print("User requested termination. Exiting.")
             break
