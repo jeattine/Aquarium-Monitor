@@ -465,11 +465,11 @@ class GpioCtl:
     def send_email_alert(self):
         me = os.environ.get('AQUAMON_EMAIL')
         password = os.environ.get('AQUAMON_EMAIL_PW')
-        recipients = os.environ.get('AQUAMON_RECIPIENTS').split(',')
+        recipients = os.environ.get('AQUAMON_RECIPIENTS')
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
         outer['From'] = me
-        outer['To'] = ','.join(recipients)
+        outer['To'] = recipients
         # Add the alert message
         msg = MIMEText("\n".join(self.email_text))
         outer.attach(msg)
@@ -491,7 +491,7 @@ class GpioCtl:
                 server.ehlo()
                 server.starttls()
                 server.login(me, password)
-                server.sendmail(me, recipients, outer.as_string())
+                server.sendmail(me, recipients.split(','), outer.as_string())
         except Exception as error:
             print("Exception={} Error sending alert!: {}".format(error, msg))
         # Initialize for next alert
