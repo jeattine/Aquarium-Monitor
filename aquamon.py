@@ -348,6 +348,8 @@ class GpioCtl:
         self.email_text = [] 
         self.connected = False
         self.settings_found = []
+        self.settings_unexpected = []
+        self.settings_missing = []
         self.start_time = datetime.now()
         self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
         
@@ -410,9 +412,11 @@ class GpioCtl:
                     if prefix.startswith(key):
                         self.my_gpios.append(sensor_class(self, parts))
                         break
-            self.missing_settings = list(set(self.global_settings) - set(self.settings_found))
-            if self.missing_settings:
-                sys.exit("Missing specifications in config.txt file: {}".format(self.missing_settings))
+            if self.settings_unexpected:
+                print("Warning, unrecognized setting(s) detected: {}".format(self.settings_unexpected))            
+            self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
+            if self.settings_missing:
+                sys.exit("Missing specifications in config.txt file: {}".format(self.settings_missing))
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
@@ -427,6 +431,9 @@ class GpioCtl:
             setattr(self, key.strip(), value.strip())
         if key.strip() in self.global_settings:
             self.settings_found.append(key.strip())
+        # we could be processing a sensor line that contains an equal character.
+        elif ',' not in key:
+            self.settings_unexpected.append(key.strip())
 
     def authenticate(self):
         self.tn.read_until('User Name: '.encode(),self.connect_timeout)
