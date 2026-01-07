@@ -118,12 +118,6 @@ class GpioAnalog(Gpio):
 
             self.averaged_sample = sum(temp_samples) / len(temp_samples)
 
-    def isDigital(self):
-        return False;
-
-    def isAnalog(self):
-        return True;
-
 class GpioDigital(Gpio):
     def __init__(self, gpio_controller, config_file_data):
         super(GpioDigital, self).__init__(gpio_controller, config_file_data)
@@ -165,12 +159,6 @@ class GpioDigital(Gpio):
             self.snapshot = 1
         elif self.zeros_count > 3:
             self.snapshot = 0
-
-    def isDigital(self):
-        return True
-
-    def isAnalog(self):
-        return False
 
 class FloorWetSensor(GpioDigital):
     def __init__(self, gpio_controller, config_file_data):
@@ -416,7 +404,7 @@ class GpioCtl:
                 print("Warning, unrecognized setting(s) detected: {}".format(self.settings_unexpected))            
             self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
             if self.settings_missing:
-                sys.exit("Missing specifications in config.txt file: {}".format(self.settings_missing))
+                sys.exit("Missing setting(s) in config.txt file: {}".format(self.settings_missing))
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
