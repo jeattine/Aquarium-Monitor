@@ -61,7 +61,7 @@ class Gpio:
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
                     if (self.last_sent_alert + timedelta(hours=self.nag_level)) < datetime.now():
-                        self.controller.email_text.append('{} Alert!\n'.format(self.read_label()))
+                        self.controller.email_text.append(f'{self.read_label()} Alert!\n')
                         self.last_sent_alert = datetime.now()
                         # force a server update prior to sending the alarm
                         self.controller.report_calls = self.controller.server_update_freq / self.controller.sample_time
@@ -102,7 +102,7 @@ class GpioAnalog(Gpio):
         return 'range:' + self.config_info[4].strip()
 
     def read_value_text(self, value):
-        return '{0:6.1f}'.format(value)
+        return f'{value:6.1f}'
 
     def read_sensor_and_update(self):
          # Simply append; the oldest value is dropped automatically  
@@ -172,14 +172,14 @@ class CO2deliverySensor(GpioDigital):
         # Do not require >3 samples of the same reading, i.e. ignore 'value'
         if self.zeros_count > 0:
             minutes_on = (self.zeros_count * self.controller.sample_time)/60
-            retval = self.config_info[5].strip() + ' {:.0f} minutes.'.format(minutes_on)
+            retval = self.config_info[5].strip() + f' {minutes_on:.0f} minutes.'
         elif self.ones_count > 0:
             minutes_off = (self.ones_count * self.controller.sample_time)/60
-            retval = self.config_info[6].strip() + ' {:.0f} minutes.'.format(minutes_off)
+            retval = self.config_info[6].strip() + f' {minutes_off:.0f} minutes.'
         else:
             return 'Not Avail'
         percent_on = (self.zeros_total * 100) / (self.zeros_total + self.ones_total)
-        return retval + ' (overall on-time: {:.0f}%)'.format(percent_on)
+        return retval + f' (overall on-time: {percent_on:.0f}%)'
 
 class TempSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
@@ -264,17 +264,17 @@ class Battery(GpioAnalog):
         # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
         if self.controller.calibrate:
-            print('Battery raw digital: {}'.format(self.averaged_sample))
+            print(f'Battery raw digital: {self.averaged_sample}')
             return self.averaged_sample
         voltage = self.averaged_sample/68.31
         return voltage
         
     def read_value_text(self, value):
         if value > float(self.config_info[5].strip()):
-            return ' {0} ({1:2.1f})'.format(self.config_info[6].strip(), value)
+            return f' {self.config_info[6].strip()} ({value:2.1f})'
         elif value > float(self.config_info[7].strip()):
-            return ' {0} ({1:2.1f})'.format(self.config_info[8].strip(), value)
-        return ' {0} ({1:2.1f})'.format(self.config_info[9].strip(), value)
+            return f' {self.config_info[8].strip()} ({value:2.1f})'
+        return f' {self.config_info[9].strip()} ({value:2.1f})'
             
 class Ph(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
@@ -294,7 +294,7 @@ class Ph(GpioAnalog):
             self.min_max_init()
         #print(self.samples)
         if self.controller.calibrate:
-            print('PH raw digitial: {}'.format(self.averaged_sample))
+            print(f'PH raw digitial: {self.averaged_sample}')
             return self.averaged_sample
         ph = self.averaged_sample / self.slope + self.offset
         if self.test_active:         
@@ -320,14 +320,14 @@ class Ph(GpioAnalog):
             with open(self.controller.local_filepath + self.controller.cloud_store + 'phlog.txt', 'a') as ph_log:
                 curDateTimeRaw = datetime.now()
                 curDateTime = curDateTimeRaw.strftime("%Y-%m-%d %H:%M:%S")
-                ph_log.write('{0},{1:2.1f}\n'.format(curDateTime, value))
+                ph_log.write(f'{curDateTime},{value:2.1f}\n')
             self.log_stamp = current_hour
         
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
         min_ts = self.min_timestamp.strftime("%I:%M %p")
         max_ts = self.max_timestamp.strftime("%I:%M %p")
-        return '{0:2.1f}  max:{1:3.1f} at {2}  min:{3:3.1f} at {4}'.format(value, self.max_ph, max_ts, self.min_ph, min_ts)
+        return f'{value:2.1f}  max:{self.max_ph:3.1f} at {max_ts}  min:{self.min_ph:3.1f} at {min_ts}'
 
 
 class GpioCtl:
@@ -401,10 +401,10 @@ class GpioCtl:
                         self.my_gpios.append(sensor_class(self, parts))
                         break
             if self.settings_unexpected:
-                print("Warning, unrecognized setting(s) detected: {}".format(self.settings_unexpected))            
+                print(f'Warning, unrecognized setting(s) detected: {self.settings_unexpected}')            
             self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
             if self.settings_missing:
-                sys.exit("Missing setting(s) in config.txt file: {}".format(self.settings_missing))
+                sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
@@ -413,7 +413,7 @@ class GpioCtl:
             try:
                 value_int = int(value.strip())
             except Exception as error:
-                sys.exit("Specified value for {} must be an integer!".format(key.strip()))
+                sys.exit(f'Specified value for {key.strip()} must be an integer!')
             setattr(self, key.strip(), value_int)
         else:
             setattr(self, key.strip(), value.strip())
@@ -439,37 +439,37 @@ class GpioCtl:
         attempt = 1
         while attempt < self.reconnect_attempts:
             dt_string = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
-            print("{} Attempt reconnect in {} seconds...".format(dt_string, self.reconnect_delay))
+            print(f'{dt_string} Attempt reconnect in {self.reconnect_delay} seconds...')
             time.sleep(self.reconnect_delay)
             try:
                 self.tn.open(self.tcp_addr)
                 self.authenticate()
                 break
             except Exception as error:
-                print("Attempt number {} failed".format(attempt))
+                print(f'Attempt number {attempt} failed')
                 attempt += 1
                 self.tn.close()
                 self.connected = False
                 if attempt == self.reconnect_attempts:
-                    print("Could not reconnect after {} attempts Terminating.".format(attempt))
+                    print(f'Could not reconnect after {attempt} attempts Terminating.')
                     raise
-        print("Successfully reconnected after {} attempts :)".format(attempt))
+        print(f'Successfully reconnected after {attempt} attempts :)')
 
     def disconnect(self):
         try:
             self.tn.write('exit\n'.encode())
         except Exception as error:
-            print("Ignored Exception={} attempting to disconnect".format(error))
+            print(f'Ignored Exception={error} attempting to disconnect')
 
     def read_gpio(self, read_type, gpio_num):
         while True:
             try:
-                self.tn.write((read_type + ' {} \n'.format(gpio_num)).encode())
+                self.tn.write((read_type + f' {gpio_num} \n').encode())
                 result = self.tn.read_until('>'.encode(), self.connect_timeout).decode()
                 rtn_int = int(result.split()[0])
                 break
             except Exception as error:
-                print("Lost connection. Exception={} reading GPIO!".format(error))
+                print(f'Lost connection. Exception={error} reading GPIO!')
                 self.tn.close()
                 self.connected = False
                 self.attempt_reconnect()              
@@ -515,7 +515,7 @@ class GpioCtl:
                 server.login(me, password)
                 server.sendmail(me, recipients.split(','), outer.as_string())
         except Exception as error:
-            print("Exception={} Error sending alert!: {}".format(error, msg))
+            print(f'Exception={error} Error sending alert!: {msg}')
         # Initialize for next alert
         self.email_text[:] = []
 
@@ -527,15 +527,15 @@ class GpioCtl:
             with open(self.local_filepath + self.cloud_store + 'current.txt', 'w') as status_file:
                 curDateTimeRaw = datetime.now()
                 curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
-                status_file.write('Sample time: {}\n'.format(curDateTime))
-                status_file.write('Monitor start time: {}\n'.format(self.start_time_str))
+                status_file.write(f'Sample time: {curDateTime}\n')
+                status_file.write(f'Monitor start time: {self.start_time_str}\n')
                 for gpio in self.my_gpios:
                     current_value = gpio.test()
-                    status_file.write('{0}:{1}\n'.format(gpio.read_label(), gpio.read_value_text(current_value)))
+                    status_file.write(f'{gpio.read_label()}:{gpio.read_value_text(current_value)}\n')
                     try:
                         gpio.log(current_value)
                     except Exception as logerr:
-                        print("Exception={} Error making log entry for {}!".format(logerr,gpio.read_label()))
+                        print(f'Exception={logerr} Error making log entry for {gpio.read_label()}!')
         if self.email_text:
             self.send_email_alert()
 
@@ -550,7 +550,7 @@ def main():
             print("User requested termination. Exiting.")
             break
         except Exception as error:
-            print("Exception={} Unhandled! Exiting".format(error))
+            print(f'Exception={error} Unhandled! Exiting')
             raise
     controller.disconnect()
 
