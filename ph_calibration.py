@@ -13,71 +13,60 @@ import numpy as np
 
 def calculate_slope_and_offset(coords):
     """
-    Calculates the slope (m) and y-offset (b) of the line of best fit 
-    for three or more 2D coordinates using linear regression.
-
-    Args:
-        coords (list of tuples/lists): A list of (x, y) coordinates.
-                                        e.g., [(x1, y1), (x2, y2), (x3, y3)]
-
-    Returns:
-        tuple: A tuple (slope, offset).
+    Calculates slope (m) and y-offset (b) for y = mx + b.
     """
-    # 1. Separate the x and y coordinates
-    # The zip function transposes the list of coordinates.
-    x_coords, y_coords = zip(*coords)
-
-    # Convert to NumPy arrays for calculation
-    x = np.array(x_coords)
-    y = np.array(y_coords)
-
-    # 2. Perform Linear Regression
-    # np.polyfit(x, y, 1) calculates the coefficients for a first-degree polynomial (a line).
-    # It returns [m, b] where m is the slope and b is the y-offset.
-    try:
-        # coefficients will be [slope, y_offset]
-        coefficients = np.polyfit(x, y, 1) 
-        slope = coefficients[0]
-        offset = coefficients[1]
-        
-        return slope, offset
-    
-    except np.linalg.LinAlgError as e:
-        # This error is highly unlikely with 3 or more points unless all x-values are the same (vertical line).
-        print(f"Error during calculation: {e}")
+    if len(coords) < 2:
         return None, None
 
-def main(): 
-    coordinates = list()
-    counter = 1
+    x, y = zip(*coords)
+    try:
+        # Returns [slope, intercept]
+        m, b = np.polyfit(x, y, 1)
+        return m, b
+    except Exception as e:
+        print(f"Calculation error: {e}")
+        return None, None
+
+def main():
+    print("--- Aquarium pH Calibration Tool ---")
+    print("Enter coordinates as 'pH, ADC_Value' (e.g., 7.0, 812)")
+    print("Press Enter on an empty line to finish.\n")
+
+    coordinates = []
+    
     while True:
-        try:
-            while True:
-                coordinate = input("Enter coordinate #{} in form: x,y: ".format(counter))
-                if len(coordinate) == 0:
-                    break
-                print('Coordinate {}: {}'.format(counter, coordinate))
-                while True:
-                    proceed = input("Type (R) to re-enter coordinate or press Enter to proceed to next coordinate: ")
-                    if proceed == "" or proceed == 'R' or proceed == 'r':
-                        break
-                if proceed == "":
-                    break
-            x_y_str = coordinate.split(',')      
-            x_y = [float(x_y_str[0]), float(x_y_str[1])]
-            coordinates.append(x_y)
-            counter += 1
-        except  ValueError:
+        raw_input = input(f"Point #{len(coordinates) + 1}: ").strip()
+        
+        if not raw_input:
+            if len(coordinates) < 2:
+                print("Error: You need at least 2 points (3 recommended).")
+                continue
             break
-    # Calculate the slope and offset
+            
+        try:
+            # Handle potential typos or missing commas
+            parts = raw_input.split(',')
+            if len(parts) != 2:
+                raise ValueError("Include exactly one comma between values.")
+                
+            x = float(parts[0].strip())
+            y = float(parts[1].strip())
+            coordinates.append((x, y))
+        except ValueError as e:
+            print(f" Invalid input: {e}. Please try again.")
+
     m, b = calculate_slope_and_offset(coordinates)
 
     if m is not None:
-        print(f"Results for Coordinates {coordinates}")
-        print(f"Slope (m): {m:.4f}")
-        print(f"Y-Offset (b): {b:.4f}")
-        print(f"Equation of the line of best fit: y = {m:.4f}x + {b:.4f}")
-        print("\nConfig file PH parameters to use: {0:.4f}, {1:.4f}".format(1/m, b))
-    
+        print("\n" + "="*30)
+        print(f"Points analyzed: {len(coordinates)}")
+        print(f"Line Equation: y = {m:.4f}x + {b:.4f}")
+        
+        inv_m = 1/m
+        print(f"Calibration: Slope={m:.4f}, Offset={b:.4f}")
+        # The calibration file want the 'inverse' slope
+        print(f"\nConfig file PH parameters to use: {inv_m:.4f}, {b:.4f}")
+        print("="*30)
+
 if __name__ == '__main__':
     main()
