@@ -40,7 +40,7 @@ class Gpio:
         conditions = self.config_info[4].lstrip().split('+')
         for condition in conditions:
             if ':' in condition:
-                time_value = condition.split('=')
+                time_value = condition.split('?')
                 timespan = time_value[0].split('-')
                 time_start = timespan[0]
                 time_end = timespan[1]

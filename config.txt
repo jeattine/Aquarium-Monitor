@@ -5,10 +5,10 @@ temp,    0,   2,   Water Temp (75-81),    75-82,            10020,        2.4
 temp,    1,  12,   Room Temp,             60-82,            10020,        -0.4 
 ph,      2,   2,   PH,                    7.8-8.5,          -32.876, 22.2366
 battery, 3,   8,   Battery Charge,        13.2-15.0,        13.2, Good, 12.9, Fair, Poor
-light,   4,   8,   Algae Scrubber Light,  21:15-09:45=200-1023+10:15-20:45=0-300
-rflow,   5,   1,   Water Movers,          14:20-14:00=10-500, NA, NA
+light,   4,   8,   Algae Scrubber Light,  21:15-09:45?200-1023+10:15-20:45?0-300
+rflow,   5,   1,   Water Movers,          14:20-14:00?10-500, NA, NA
 hilow,   6,   2,   Aquarium Water level,  256-768,          Low, High, Ok
-light,   7,   1,   Main Light,            09:10-20:00=500-1023+21:40-08:00=0-500
+light,   7,   1,   Main Light,            09:10-20:00?500-1023+21:40-08:00?0-500
 hilow,   8,   1,   Sump Water Level,      256-768,          Low, High, Ok
 gpiod,   9,   2,   Return Pump Flow,      0,                Running, Shutdown
 gpiod,   A,   4,   Overflow box level,    1,                High, Ok
