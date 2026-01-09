@@ -419,8 +419,7 @@ class GpioCtl:
             setattr(self, key.strip(), value.strip())
         if key.strip() in self.global_settings:
             self.settings_found.append(key.strip())
-        # we could be processing a sensor line that contains an equal character.
-        elif ',' not in key:
+        else:
             self.settings_unexpected.append(key.strip())
 
     def authenticate(self):
