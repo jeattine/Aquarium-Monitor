@@ -339,8 +339,15 @@ class GpioCtl:
         self.settings_unexpected = []
         self.settings_missing = []
         self.start_time = datetime.now()
-        self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
+        self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")      
         
+        # List of required environment variables
+        required_vars = {
+            'gpio_pw': 'AQUAMON_GPIO_PW',
+            'me': 'AQUAMON_EMAIL',
+            'email_pw': 'AQUAMON_EMAIL_PW',
+            'recipients': 'AQUAMON_RECIPIENTS'
+        }
         # Mapping config keys to Class names
         self.SENSOR_MAP = {
             'gpioa': GpioAnalog,
@@ -366,7 +373,6 @@ class GpioCtl:
         # All required global settings
         self.global_settings = self.global_integers + [
             'username',
-            'password',
             'tcp_addr',
             'smtp',
             'email_subject',
@@ -374,10 +380,20 @@ class GpioCtl:
             'local_filepath'
         ]           
 
+        # Make sure required env vars are set and exit immediately if not.
+        for attr, env_var in required_vars.items():
+            value = os.environ.get(env_var)
+            if value is None:
+                sys.exit(f"Critical Error: {env_var} is not set.")
+            setattr(self, attr, value)        
+        
+        # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
         self.load_config('config.txt')
+        
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
+        
         # Connect to the GPIO monitor
         self.connect()
 
@@ -401,7 +417,7 @@ class GpioCtl:
                         self.my_gpios.append(sensor_class(self, parts))
                         break
             if self.settings_unexpected:
-                print(f'Warning, unrecognized setting(s) detected: {self.settings_unexpected}')            
+                print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")            
             self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
             if self.settings_missing:
                 sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
@@ -426,7 +442,7 @@ class GpioCtl:
         self.tn.read_until('User Name: '.encode(),self.connect_timeout)
         self.tn.write((self.username + '\n').encode())
         self.tn.read_until('Password: '.encode(), self.connect_timeout)
-        self.tn.write((self.password  + '\n').encode())
+        self.tn.write((self.gpio_pw  + '\n').encode())
         print((self.tn.read_until('>>'.encode())).decode())
         self.connected = True
 
@@ -438,27 +454,27 @@ class GpioCtl:
         attempt = 1
         while attempt < self.reconnect_attempts:
             dt_string = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
-            print(f'{dt_string} Attempt reconnect in {self.reconnect_delay} seconds...')
+            print(f"{dt_string} Attempt reconnect in {self.reconnect_delay} seconds...")
             time.sleep(self.reconnect_delay)
             try:
                 self.tn.open(self.tcp_addr)
                 self.authenticate()
                 break
             except Exception as error:
-                print(f'Attempt number {attempt} failed')
+                print(f"Attempt number {attempt} failed")
                 attempt += 1
                 self.tn.close()
                 self.connected = False
                 if attempt == self.reconnect_attempts:
-                    print(f'Could not reconnect after {attempt} attempts Terminating.')
+                    print(f"Could not reconnect after {attempt} attempts Terminating.")
                     raise
-        print(f'Successfully reconnected after {attempt} attempts :)')
+        print(f"Successfully reconnected after {attempt} attempts :)")
 
     def disconnect(self):
         try:
             self.tn.write('exit\n'.encode())
         except Exception as error:
-            print(f'Ignored Exception={error} attempting to disconnect')
+            print(f"Ignored Exception={error} attempting to disconnect")
 
     def read_gpio(self, read_type, gpio_num):
         while True:
@@ -468,7 +484,7 @@ class GpioCtl:
                 rtn_int = int(result.split()[0])
                 break
             except Exception as error:
-                print(f'Lost connection. Exception={error} reading GPIO!')
+                print(f"Lost connection. Exception={error} reading GPIO!")
                 self.tn.close()
                 self.connected = False
                 self.attempt_reconnect()              
@@ -485,13 +501,10 @@ class GpioCtl:
             x.read_sensor_and_update()
 
     def send_email_alert(self):
-        me = os.environ.get('AQUAMON_EMAIL')
-        password = os.environ.get('AQUAMON_EMAIL_PW')
-        recipients = os.environ.get('AQUAMON_RECIPIENTS')
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
-        outer['From'] = me
-        outer['To'] = recipients
+        outer['From'] = self.me
+        outer['To'] = self.recipients
         # Add the alert message
         msg = MIMEText("\n".join(self.email_text))
         outer.attach(msg)
@@ -511,10 +524,10 @@ class GpioCtl:
             with smtplib.SMTP(self.smtp, 587) as server:
                 server.ehlo()
                 server.starttls()
-                server.login(me, password)
-                server.sendmail(me, recipients.split(','), outer.as_string())
+                server.login(self.me, self.email_pw)
+                server.sendmail(self.me, self.recipients.split(','), outer.as_string())
         except Exception as error:
-            print(f'Exception={error} Error sending alert!: {msg}')
+            print(f"Exception={error} Error sending alert!: {msg}")
         # Initialize for next alert
         self.email_text[:] = []
 
@@ -534,7 +547,7 @@ class GpioCtl:
                     try:
                         gpio.log(current_value)
                     except Exception as logerr:
-                        print(f'Exception={logerr} Error making log entry for {gpio.read_label()}!')
+                        print(f"Exception={logerr} Error making log entry for {gpio.read_label()}!")
         if self.email_text:
             self.send_email_alert()
 
@@ -549,7 +562,7 @@ def main():
             print("User requested termination. Exiting.")
             break
         except Exception as error:
-            print(f'Exception={error} Unhandled! Exiting')
+            print(f"Exception={error} Unhandled! Exiting")
             raise
     controller.disconnect()
 

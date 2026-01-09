@@ -1,5 +1,5 @@
 #------------------------------------------------------------------------------------
-#Class,  Gpio, Nag, Label,                 Condition,        Class specific parms
+#Class, Gpio, Nag, Label,                 Condition,        Class specific parms
 #------------------------------------------------------------------------------------
 temp,    0,   2,   Water Temp (75-81),    75-82,            10020,        2.4
 temp,    1,  12,   Room Temp,             60-82,            10020,        -0.4 
@@ -30,8 +30,6 @@ floor,   E,   2,   Floor,                 1,                Wet, Dry
 #------------------------------------------------------------------------------------
 # userid of GPIO device on the local network
 username=admin
-# password of the GPIO device on the local network
-password=admin
 # address of the GPIO device on the local network
 tcp_addr=192.168.1.103
 # seconds to wait for a responses from the GPIO device
@@ -57,7 +55,8 @@ local_filepath=C:/Users/johna/
 #--------------------------------------------------------------------------------
 #  AQUAMON_EMAIL: The 'from' address of the alert email sent by the monitor
 #  AQUAMON_EMAIL_PW: The SMTP password for sending the alert email
-#  AQUAMON_RECIPIENTS: Comma separated email list to be sent alerts 
+#  AQUAMON_RECIPIENTS: Comma separated email list to be sent alerts
+#  AQUAMON_GPIO_PW: The password to access the GPIO device via telnet 
 
 
 
