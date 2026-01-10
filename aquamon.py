@@ -10,6 +10,8 @@ import telnetlib
 import math
 import smtplib
 import statistics
+import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
 from email.mime.multipart import MIMEMultipart
@@ -99,7 +101,7 @@ class GpioAnalog(Gpio):
         return self.averaged_sample
 
     def read_condition(self):
-        return 'range:' + self.config_info[4].strip()
+        return f'range:{self.config_info[4].strip()}'
 
     def read_value_text(self, value):
         return f'{value:6.1f}'
@@ -285,7 +287,19 @@ class Ph(GpioAnalog):
         # set the sample buffer to 36 entries,initialized at a ph of 8.
         self.samples = deque([(8 - self.offset) * self.slope] * 36, maxlen=36)
         self.min_max_init()
-        self.log_stamp = datetime.now().hour
+        self.log_stamp = datetime.now().hour   
+        log_path = self.controller.base_path / 'phlog.txt'
+        self.ph_logger = logging.getLogger("PhLogger")
+        self.ph_logger.setLevel(logging.INFO)
+        
+        # Avoid adding multiple log handlers if the class is re-instantiated
+        if not self.ph_logger.handlers:
+            # Keep 5 backup files, each max 1MB
+            handler = RotatingFileHandler(log_path, maxBytes=10**6, backupCount=5)
+            # Standard CSV-like format: Time,Value
+            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            handler.setFormatter(formatter)
+            self.ph_logger.addHandler(handler)    
 
     def read_value(self):
         current_day = datetime.now().day
@@ -316,13 +330,10 @@ class Ph(GpioAnalog):
     def log(self, value):
         current_hour = datetime.now().hour
         if current_hour != self.log_stamp:
-            # write current datetime and PH value into the log file
-            with open(self.controller.local_filepath + self.controller.cloud_store + 'phlog.txt', 'a') as ph_log:
-                curDateTimeRaw = datetime.now()
-                curDateTime = curDateTimeRaw.strftime("%Y-%m-%d %H:%M:%S")
-                ph_log.write(f'{curDateTime},{value:2.1f}\n')
+            # Logging library handles the timestamp and file writing
+            self.ph_logger.info(f"{value:2.1f}")
             self.log_stamp = current_hour
-        
+            
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
         min_ts = self.min_timestamp.strftime("%I:%M %p")
@@ -390,6 +401,7 @@ class GpioCtl:
         # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
         self.load_config('config.txt')
+
         
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
@@ -400,13 +412,22 @@ class GpioCtl:
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
+                # Handle global configuration settings
                 line = line.strip()
                 if not line or line[0] == '#' or '=' in line:
                     # Handle global settings (username, password, etc.)
                     if '=' in line:
                         self.parse_setting(line)
-                    continue
-                
+            # Define the base directory using pathlib
+            self.base_path = Path(self.local_filepath) / self.cloud_store
+        
+            # Ensure the directory exists (create it if it doesn't)
+            self.base_path.mkdir(parents=True, exist_ok=True)  
+
+            # Move through the file again, this time collecting sensor configuration
+            gpio_config.seek(0)
+            
+            for line in gpio_config: 
                 # Handle sensor instantiations
                 parts = line.split(',')
                 prefix = parts[0].lower()
@@ -509,11 +530,16 @@ class GpioCtl:
         msg = MIMEText("\n".join(self.email_text))
         outer.attach(msg)
 
+        # Path to current status
+        status_file = self.base_path / 'current.txt'
+
         # Attach the current status information
-        with open(self.local_filepath + self.cloud_store + 'current.txt', 'r') as sf:
-            contents = sf.read()
+        try:
+            contents = status_file.read_text()
             stats = MIMEText(contents.replace(';', '\n'))
-        outer.attach(stats)
+            outer.attach(stats)
+        except FileNotFoundError:
+            print("Warning: current.txt not found for email attachment.")
 
         # Add a link to check the current status
         email_link = MIMEText(self.cloud_store + 'current.txt\n')
@@ -536,7 +562,8 @@ class GpioCtl:
         self.report_calls += 1
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
-            with open(self.local_filepath + self.cloud_store + 'current.txt', 'w') as status_file:
+            status_file_path = self.base_path / 'current.txt'
+            with status_file_path.open('w') as status_file:
                 curDateTimeRaw = datetime.now()
                 curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
                 status_file.write(f'Sample time: {curDateTime}\n')
