@@ -11,6 +11,7 @@ import math
 import smtplib
 import statistics
 import logging
+import socket
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
@@ -578,7 +579,20 @@ class GpioCtl:
         if self.email_text:
             self.send_email_alert()
 
+def ensure_single_instance(port=65432):
+    """Ensures only one instance of the script runs using a local socket."""
+    # We create a 'global' variable so the socket isn't garbage collected
+    global lock_socket
+    lock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        # We try to bind to a specific local port
+        lock_socket.bind(("127.0.0.1", port))
+    except socket.error:
+        print("--- ERROR: Aquarium Monitor is already running! ---")
+        sys.exit(1)
+        
 def main():
+    ensure_single_instance()
     controller = GpioCtl()
     while True:
         try:
