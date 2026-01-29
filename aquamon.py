@@ -579,6 +579,16 @@ class GpioCtl:
         if self.email_text:
             self.send_email_alert()
 
+def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
+    while True:
+        try:
+            socket.setdefaulttimeout(timeout)
+            socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect((host, port))
+            return
+        except OSError:
+            print("Waiting for network...")
+            time.sleep(5)
+            
 def ensure_single_instance(port=65432):
     """Ensures only one instance of the script runs using a local socket."""
     # We create a 'global' variable so the socket isn't garbage collected
@@ -592,6 +602,7 @@ def ensure_single_instance(port=65432):
         sys.exit(1)
         
 def main():
+    wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
     while True:
