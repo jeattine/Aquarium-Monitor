@@ -12,6 +12,7 @@ import smtplib
 import statistics
 import logging
 import socket
+import subprocess
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
@@ -356,6 +357,7 @@ class GpioCtl:
         # List of required environment variables
         required_vars = {
             'gpio_pw': 'AQUAMON_GPIO_PW',
+            'gpio_ssid' : 'AQUAMON_GPIO_SSID',
             'me': 'AQUAMON_EMAIL',
             'email_pw': 'AQUAMON_EMAIL_PW',
             'recipients': 'AQUAMON_RECIPIENTS'
@@ -398,6 +400,8 @@ class GpioCtl:
             if value is None:
                 sys.exit(f"Critical Error: {env_var} is not set.")
             setattr(self, attr, value)        
+
+        print(f"Alerts will be sent to the following recipients: {self.recipients}")
         
         # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
@@ -407,9 +411,29 @@ class GpioCtl:
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
         
+        # Are we running on the local network that contains the GPIO device?
+        if not self.network_ssid(self.gpio_ssid):
+            sys.exit(f"Not running on the network that contains the GPIO device. Expected SSID: {self.gpio_ssid}")
+        
         # Connect to the GPIO monitor
         self.connect()
 
+    def network_ssid(self, target_ssid):
+        try:
+            # Run the Windows netsh command
+            # 'capture_output' grabs the result, 'text=True' treats it as a string
+            devices = subprocess.run(['netsh', 'wlan', 'show', 'networks'], capture_output=True, text=True, check=True)
+        
+            # Check if the target SSID exists in the command output
+            if target_ssid in devices.stdout:
+                return True
+            else:
+                return False
+                
+        except subprocess.CalledProcessError as e:
+            print(f"Error accessing WLAN: {e}")
+            return False
+        
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
@@ -561,12 +585,13 @@ class GpioCtl:
     def test_and_report(self):
         # store the status file to the cloud drive based on the update frequency
         self.report_calls += 1
+        
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
+            curDateTimeRaw = datetime.now()
+            curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
             status_file_path = self.base_path / 'current.txt'
             with status_file_path.open('w') as status_file:
-                curDateTimeRaw = datetime.now()
-                curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
                 status_file.write(f'Sample time: {curDateTime}\n')
                 status_file.write(f'Monitor start time: {self.start_time_str}\n')
                 for gpio in self.my_gpios:
@@ -577,6 +602,9 @@ class GpioCtl:
                     except Exception as logerr:
                         print(f"Exception={logerr} Error making log entry for {gpio.read_label()}!")
         if self.email_text:
+            alerts = ", ".join(self.email_text)
+            clean_alerts = alerts.replace("\n", "")
+            print(f"{curDateTime}: {clean_alerts}")
             self.send_email_alert()
 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
@@ -602,6 +630,7 @@ def ensure_single_instance(port=65432):
         sys.exit(1)
         
 def main():
+    print("Starting Aquarium Monitor ...")
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
