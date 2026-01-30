@@ -357,7 +357,6 @@ class GpioCtl:
         # List of required environment variables
         required_vars = {
             'gpio_pw': 'AQUAMON_GPIO_PW',
-            'gpio_ssid' : 'AQUAMON_GPIO_SSID',
             'me': 'AQUAMON_EMAIL',
             'email_pw': 'AQUAMON_EMAIL_PW',
             'recipients': 'AQUAMON_RECIPIENTS'
@@ -411,29 +410,9 @@ class GpioCtl:
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
         
-        # Are we running on the local network that contains the GPIO device?
-        if not self.network_ssid(self.gpio_ssid):
-            sys.exit(f"Not running on the network that contains the GPIO device. Expected SSID: {self.gpio_ssid}")
-        
         # Connect to the GPIO monitor
         self.connect()
 
-    def network_ssid(self, target_ssid):
-        try:
-            # Run the Windows netsh command
-            # 'capture_output' grabs the result, 'text=True' treats it as a string
-            devices = subprocess.run(['netsh', 'wlan', 'show', 'networks'], capture_output=True, text=True, check=True)
-        
-            # Check if the target SSID exists in the command output
-            if target_ssid in devices.stdout:
-                return True
-            else:
-                return False
-                
-        except subprocess.CalledProcessError as e:
-            print(f"Error accessing WLAN: {e}")
-            return False
-        
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
