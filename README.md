@@ -1,7 +1,7 @@
 # Aquarium-Monitor
 Python-based aquarium monitor program to interface with the Numato ethernet 16 channel GPIO module. Can be adapted to other GPIO devices. The following is a system view of the aquarium monitor.  
 ![System view](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/SystemView.png)   
-The monitor program requires Python3. If using a Python version . It uses the telnet class that has been deprecated in Python 3.11 and removed in 3.13. If you are running a version 3.13 or higher, you must pip-install the package "telnetlib-313-and-up", otherwise use the original telnetlib. I am currently running on version 3.14. The program design has a 'Main' that constructs an GpioCtl object and loops calling methods on the GpioCtl object instantiation. 'Main' will stay in a continuous loop until an exception causes it to exit. A keyboard exception would be the only expected exiting condition. The input to the program is a config.txt file expected to be in the current directory. This file is composed of two sections. The first section assigns the GPIO numbers of the hardware to various classes to read and process the sensor data connected to those GPIO inputs. Some examples are classes to monitor temperature, PH, Flow, water level, and light. These classes are derived from either a GPIO_Digital or a GPIO_Analog class, depending on the type of sensor. The GPIO_Digital and GPIO_Analog are derived from the GPIO base class. In addition to the GPIO assignment to classes, this section of the config file also gives a descriptive name to each GPIO input and defines the expected values/ranges/time-periods for operation.  
+The monitor program requires Python3. It uses the telnet class that has been deprecated in Python 3.11 and removed in 3.13. If you are running a version 3.13 or higher, you must pip-install the package "telnetlib-313-and-up", otherwise use the original telnetlib. I am currently running on version 3.14. The program design has a 'Main' that constructs an GpioCtl object and loops calling methods on the GpioCtl object instantiation. 'Main' will stay in a continuous loop until an exception causes it to exit. A keyboard exception would be the only expected exiting condition. The input to the program is a config.txt file expected to be in the current directory. This file is composed of two sections. The first section assigns the GPIO numbers of the hardware to various classes to read and process the sensor data connected to those GPIO inputs. Some examples are classes to monitor temperature, PH, Flow, water level, and light. These classes are derived from either a GPIO_Digital or a GPIO_Analog class, depending on the type of sensor. The GPIO_Digital and GPIO_Analog are derived from the GPIO base class. In addition to the GPIO assignment to classes, this section of the config file also gives a descriptive name to each GPIO input and defines the expected values/ranges/time-periods for operation.  
 ![Class structure](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Design.png)   
 The second section of the configuration file contains network and sampling configuration data. This includes login information, IP address of the device, sample times, email addresses, smp server info, and various other data. There are two distinct outputs from the monitor: email alerts and a status file. Every number of seconds defined in the config file, the status file is written out to a cloud drive. I am personally using OneDrive, but any cloud drive would work. I have access to my cloud drive from all of my mobile devices, allowing me to check the status whenever I want. The other output is an email alert. These are sent when a sensor does not meet the conditions specified in the config file. The email can be configured to be sent to one or multiple addresses. The following screenshots show and example of an alert email and a status file:  
 ![Class structure](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/ExampleOutput.png)  
@@ -13,9 +13,13 @@ I configure the Windows task manager to run this script every hour. The scripts 
 
 
 ![Tasks](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/TaskScheduler1.png) 
-![Start Monitor Console](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/TaskScheduler2.png) 
+
+![Start Monitor Console](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/TaskScheduler2.png)
+ 
 ![Start Monitor Settings](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/TaskScheduler3.png)
+
 ![LockWorkstation](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/TaskScheduler4.png)
+
 ![Disable Reboot](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/TaskScheduler5.png)  
 
   
