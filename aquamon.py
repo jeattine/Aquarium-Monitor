@@ -112,11 +112,11 @@ class GpioAnalog(Gpio):
          # Simply append; the oldest value is dropped automatically  
         new_val = self.controller.read_analog(self.config_info[1].lstrip())
         self.samples.append(new_val)
-        # Create a running averaged sample dumping the 1/4th highest and 1/4th lowest samples
+        # Create a running averaged sample dumping the 1/8th highest and 1/8th lowest samples
         if self.enable_averaging:
             temp_samples = sorted(list(self.samples))
             # Trim 25% lowest and 25% highest
-            trim_low = int(len(temp_samples)/4)
+            trim_low = int(len(temp_samples)/8)
             trim_high = int(len(temp_samples)) - trim_low
             temp_samples = temp_samples[trim_low:trim_high]
 
@@ -188,6 +188,22 @@ class CO2deliverySensor(GpioDigital):
 class TempSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(TempSensor, self).__init__(gpio_controller, config_file_data)
+        self.ema_value = None
+        self.alpha = 0.2  # Smaller = smoother but slower to react
+
+    def read_sensor_and_update(self):
+        # Use parent logic to get the trimmed mean
+        super().read_sensor_and_update()
+        current_trimmed_mean = self.averaged_sample
+
+        # Apply Exponential Moving Average (EMA)
+        if self.ema_value is None:
+            self.ema_value = current_trimmed_mean
+        else:
+            self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
+        
+        # Overwrite the result used for Temperature calculation
+        self.averaged_sample = self.ema_value
 
     def read_value(self):
         pad_resistor = float(self.config_info[5].lstrip())
@@ -285,9 +301,10 @@ class Ph(GpioAnalog):
         super(Ph, self).__init__(gpio_controller, config_file_data)
         # This class tracks the max and min values/timestamps and logs PH values every hour
         self.slope = float(self.config_info[5].lstrip())
-        self.offset = float(self.config_info[6].lstrip())     
-        # set the sample buffer to 36 entries,initialized at a ph of 8.
-        self.samples = deque([(8 - self.offset) * self.slope] * 36, maxlen=36)
+        self.offset = float(self.config_info[6].lstrip())
+        self.samples = deque([(8.1 - self.offset) * self.slope] * 16, maxlen=16)       
+        self.ema_value = None
+        self.alpha = 0.1  # Smaller = smoother but slower to react
         self.min_max_init()
         self.log_stamp = datetime.now().hour   
         log_path = self.controller.base_path / 'phlog.txt'
@@ -302,6 +319,19 @@ class Ph(GpioAnalog):
             formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
             handler.setFormatter(formatter)
             self.ph_logger.addHandler(handler)    
+
+    def read_sensor_and_update(self):
+        # Use parent class logic to get the trimmed mean
+        super().read_sensor_and_update()
+        current_trimmed_mean = self.averaged_sample
+
+        # Apply Exponential Moving Average (EMA)
+        if self.ema_value is None:
+            self.ema_value = current_trimmed_mean
+        else:
+            self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)      
+        # Overwrite the result used for PH calculation
+        self.averaged_sample = self.ema_value
 
     def read_value(self):
         current_day = datetime.now().day
