@@ -1,62 +1,75 @@
 #------------------------------------------------------------------------------------
 #Class, Gpio,Nag,Label,                Condition,        Class specific parms
 #------------------------------------------------------------------------------------
-temp,    0,  2,  Water Temp (75-81),   75-82,            10020,  2.4
-temp,    1, 12,  Room Temp,            60-82,            10020, -0.4 
-ph,      2,  4,  PH,                   7.8-8.5,         -32.876, 22.2366
-battery, 3, 24,  Battery Charge,       13.2-15.0,        13.2, Good, 12.9, Fair, Poor
-light,   4,  8,  Algae Scrubber Light, 21:15-09:45?200-1023+10:15-20:45?0-300
-rflow,   5,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
-hilow,   6,  1,  Aquarium Water level, 14:20-14:00?256-768, Low, High, Ok
-light,   7,  2,  Main Light,           09:10-20:00?500-1023+21:40-08:00?0-500
-hilow,   8,  1,  Sump Water Level,     14:20-14:00?256-768, Low, High, Ok
-gpiod,   9,  2,  Return Pump Flow,     14:20-14:00?0,    Running, Shutdown
-gpiod,   A,  4,  Overflow box level,   1,                High, Ok
-gpiod,   B,  2,  Conditional Power,    14:20-14:00?0,    On, Off
-gpiod,   C,  8,  Protein Skimmer,      1,                Full, Ok
-gpiod,   D,  4,  Top-off reservoir,    0,                Ok,  Low
-floor,   E,  1,  Floor,                1,                Wet, Dry
-#gpiod,  F,  8,  (unused),             0,                NA, NA
 #
-# Notes: 1. Gpio's 0,1 are wired special for temperature sensing:
+#####################  a n a l o g  s e n s o r  s e c t i o n  ######################
+temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
+temp,    2, 12,  Room Temp,            60-82,            10020, -0.4 
+ph,      3,  4,  PH,                   7.8-8.5,         -32.876, 730.45
+battery, 4, 24,  Battery Charge,       13.2-15.0,        13.2, Good, 12.9, Fair, Poor
+light,   5,  8,  Algae Scrubber Light, 21:15-09:45?200-1023+10:15-20:45?0-300
+rflow,   6,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
+hilow,   7,  1,  Aquarium Water level, 14:20-14:00?256-768, Low, High, Ok
+light,   8,  2,  Main Light,           09:10-20:00?500-1023+21:40-08:00?0-500
+hilow,   9,  1,  Sump Water Level,     14:20-14:00?256-768, Low, High, Ok
+#gpioa, 10,  1,  (unused analog),      NA,               NA          
+#gpioa, 11,  1,  (unused analog),      NA,               NA          
+#gpioa, 12,  1,  (unused analog),      NA,               NA          
+#gpioa, 13,  1,  (unused analog),      NA,               NA          
+#gpioa, 14,  1,  (unused analog),      NA,               NA
+#gpioa, 15,  1,  (unused analog),      NA,               NA 
+#gpioa, 16,  1,  (unused analog),      NA,               NA  
+#
+###################  d  i g i t a l   s e n s o r   s e c t i o n  ###################         
+gpiod,  17,  2,  Return Pump Flow,     14:20-14:00?0,    Running, Shutdown
+gpiod,  18,  4,  Overflow box level,   1,                High, Ok
+gpiod,  19,  2,  Conditional Power,    14:20-14:00?0,    On, Off
+gpiod,  20,  8,  Protein Skimmer,      1,                Full, Ok
+gpiod,  21,  4,  Top-off reservoir,    0,                Ok,  Low
+floor,  22,  1,  Floor,                1,                Wet, Dry
+#gpiod, 23,  8,  (unused digital),     0,                NA, NA
+#gpiod, 24,  8,  (unused digital),     0,                NA, NA
+#
+# Notes: 1. Gpio's 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
-#           Gpio's 2,3 do not have pull-up resistors. Used for ext voltage sensing
+#           Gpio's 3,4 do not have pull-up resistors. Used for ext voltage sensing
 #           All other inputs are wired with a 10K pull-up resistor
-#        2. Gpio's A-F cannot be configured as an analog interface
-#        3. 'Nag' is the number of hours before sending another alert for 
+#        2. Gpio's 1-16 are analog interfaces and only support analog class objects
+#        3. Gpio's 17-24 are digital interfaces and only support digital class objects
+#        4. 'Nag' is the number of hours before sending another alert for 
 #           a specific GPIO condition violation that has not cleared.
+#      
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
 #------------------------------------------------------------------------------------
-# userid of GPIO device on the local network
-username=admin
-# address of the GPIO device on the local network
-tcp_addr=192.168.1.103
-# seconds to wait for a responses from the GPIO device
+# Seconds to wait for a responses from the GPIO device
 connect_timeout=6
-# seconds to wait before attempting a reconnect
+# Seconds to wait before attempting a reconnect
 reconnect_delay=120
-# number of times to attempt a reconnect before exiting
+# Number of times to attempt a reconnect before exiting
 reconnect_attempts=60
-# seconds between updates of the cloud-based status file
+# Seconds between updates of the cloud-based status file
 server_update_freq=60
-# seconds between sampling the GPIO device inputs
+# Seconds between sampling the GPIO device inputs
 sample_time=4
+# PH high calibration solution at 21 C
+ph_calibration_high=9.23
+# PH low calibration solution at 21 C
+ph_calibration_low=6.88
 # smtp server to use for sending alerts
 smtp=smtp.gmail.com
-# subject line in the alert email
+# Subject line in the alert email
 email_subject=Alert from Attinella aquarium
-# directory of the cloud storage
-cloud_store=OneDrive/Aquarium/aquamonitor/status/
-# local filepath to reach local synchronized copy of cloud storage
-local_filepath=C:/Users/johna/
+# Location to store status
+cloud_store=Aquarium/aquamonitor/status
+# Local base filepath 
+local_filepath=/home/usr/
 #--------------------------------------------------------------------------------
 #  Expected Environment Variables
 #--------------------------------------------------------------------------------
 #  AQUAMON_EMAIL: The 'from' address of the alert email sent by the monitor
 #  AQUAMON_EMAIL_PW: The SMTP password for sending the alert email
 #  AQUAMON_RECIPIENTS: Comma separated email list to be sent alerts
-#  AQUAMON_GPIO_PW: The password to access the GPIO device via telnet 
 
 
 

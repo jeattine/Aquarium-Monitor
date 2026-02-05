@@ -6,7 +6,6 @@ import sys
 import os
 import shutil
 import time
-import telnetlib
 import math
 import smtplib
 import statistics
@@ -19,6 +18,16 @@ from datetime import timedelta, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from collections import deque
+from gpiozero import MCP3008, DigitalInputDevice, Button
+from luma.core.interface.serial import i2c
+from luma.oled.device import ssd1306
+from luma.core.render import canvas
+
+# --- HARDWARE MAPPING ---
+# MCP3008 Chip 0: Channels 0-7 (Temp, PH, etc.)
+# MCP3008 Chip 1: Channels 8+
+# OLED: I2C Address 0x3C
+# Buttons: GPIO 23 (pH Low Calibrate), GPIO 24 (pH High Calibrate)
 
 class Gpio:
     def __init__(self, gpio_controller, config_file_data):
@@ -189,7 +198,7 @@ class TempSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(TempSensor, self).__init__(gpio_controller, config_file_data)
         self.ema_value = None
-        self.alpha = 0.2  # Smaller = smoother but slower to react
+        self.alpha = 0.2  # 20% of new average mixed with 80% previous
 
     def read_sensor_and_update(self):
         # Use parent logic to get the trimmed mean
@@ -228,6 +237,10 @@ class TempSensor(GpioAnalog):
         temp = (temp * 9.0) / 5.0 + 32.0
         # Adjust with calibration value
         calibration = float(self.config_info[6].lstrip())
+        
+        # Store water temp in controller for display
+        if "Water" in config_info[3].strip():
+            controller.current_temp = temp + calibration
 
         return temp + calibration
 
@@ -302,9 +315,12 @@ class Ph(GpioAnalog):
         # This class tracks the max and min values/timestamps and logs PH values every hour
         self.slope = float(self.config_info[5].lstrip())
         self.offset = float(self.config_info[6].lstrip())
-        self.samples = deque([(8.1 - self.offset) * self.slope] * 16, maxlen=16)       
+        self.samples = deque([(8.1 * self.slope + self.offset) * 16, maxlen=16)       
         self.ema_value = None
-        self.alpha = 0.1  # Smaller = smoother but slower to react
+        self.alpha = 0.2  # 20% of new average mixed with 80% previous
+        self.raw_low = None
+        self.raw_high = None
+
         self.min_max_init()
         self.log_stamp = datetime.now().hour   
         log_path = self.controller.base_path / 'phlog.txt'
@@ -319,7 +335,7 @@ class Ph(GpioAnalog):
             formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
             handler.setFormatter(formatter)
             self.ph_logger.addHandler(handler)    
-
+        
     def read_sensor_and_update(self):
         # Use parent class logic to get the trimmed mean
         super().read_sensor_and_update()
@@ -338,11 +354,12 @@ class Ph(GpioAnalog):
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
             self.min_max_init()
-        #print(self.samples)
-        if self.controller.calibrate:
-            print(f'PH raw digitial: {self.averaged_sample}')
-            return self.averaged_sample
-        ph = self.averaged_sample / self.slope + self.offset
+        
+        ph = (self.averaged_sample - self.offset) / self.slope
+        
+        # Record PH in controller for Desplay Panel
+        controller.current_ph = ph
+        
         if self.test_active:         
             if ph > self.max_ph:
                 self.max_ph = ph
@@ -372,6 +389,66 @@ class Ph(GpioAnalog):
         max_ts = self.max_timestamp.strftime("%I:%M %p")
         return f'{value:2.1f}  max:{self.max_ph:3.1f} at {max_ts}  min:{self.min_ph:3.1f} at {min_ts}'
 
+    def calibrate(self, target):
+        # Capture the current raw value from the running average
+        raw = self.averaged_sample
+        if target == self.controller.ph_calibrate_low:
+            self.raw_low = raw
+        else:
+            self.raw_high = raw
+        
+        if self.raw_low and self.raw_high:
+            self.slope = (self.raw_high - self.raw_low) /  (self.controller.ph_calibrate_high - self.controller.ph_calibrate_low)
+            self.offset = self.controller.ph_calibrate_low - (self.raw_low / self.slope)
+            self.save_to_config()
+            # Reset the stored calibration data to allow re-calibration
+            self.raw_low = 0
+            self.raw_high = 0
+
+    def save_to_config(self):
+        filename = 'config.txt'
+        updated_lines = []
+        
+        try:
+            with open(filename, 'r') as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                # Identify the pH line (starts with 'ph')
+                if line.strip().startswith('ph,'):
+                    parts = line.split(',')
+                    # parts[0]=class, [1]=gpio, [2]=nag, [3]=label, [4]=condition
+                    # parts[5]=slope, [6]=offset
+                    
+                    # We preserve the first 5 fields exactly as they are
+                    parts[5] = f" {self.slope:.4f}"
+                    # Append newline to the last part
+                    parts[6] = f" {self.offset:.4f}\n"
+                    
+                    new_line = ",".join(parts)
+                    updated_lines.append(new_line)
+                    print(f"Updated config line: {new_line.strip()}")
+                else:
+                    updated_lines.append(line)
+            
+            # Write the updated content back to the file
+            with open(filename, 'w') as f:
+                f.writelines(updated_lines)
+            
+            print("Successfully saved new calibration to config.txt")
+            
+        except Exception as e:
+            print(f"Error saving calibration: {e}")       
+
+class CalibrationButtons:
+    def __init__(self, ph_sensor, controller):
+        self.ph = ph_sensor
+        self.controller = controller
+        self.btn_low = Button(23, bounce_time=0.1)
+        self.btn_high = Button(24, bounce_time=0.1)
+        
+        self.btn_low.when_pressed = lambda: self.ph.calibrate(controller.ph_calibrate_low)
+        self.btn_high.when_pressed = lambda: self.ph.calibrate(controller.ph_calibrate_high)
 
 class GpioCtl:
     def __init__(self):
@@ -382,7 +459,9 @@ class GpioCtl:
         self.settings_unexpected = []
         self.settings_missing = []
         self.start_time = datetime.now()
-        self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")      
+        self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
+        self.display_ph = 0.0
+        self.display_temp = 0.0
         
         # List of required environment variables
         required_vars = {
@@ -412,16 +491,39 @@ class GpioCtl:
             'reconnect_attempts',
             'server_update_freq',
             'sample_time'
-        ]  
+        ]    
+        
+        # Global float settings
+        self.global_floats = [
+            'ph_calibrate_low',
+            'ph_calibrate_high'            
+        ]
+        
         # All required global settings
-        self.global_settings = self.global_integers + [
-            'username',
-            'tcp_addr',
+        self.global_settings = self.global_integers + self.global_floats + [
             'smtp',
             'email_subject',
             'cloud_store',
             'local_filepath'
         ]           
+
+        # Digital Pin Mapping (Hex from config -> Pi GPIO)
+        self.digital_map = {
+            # config GPIO Number,  Raspberry PI BCM Number
+            '17': DigitalInputDevice(4, pull_up=True),  # pin 7
+            '18': DigitalInputDevice(17, pull_up=True), # pin 11
+            '19': DigitalInputDevice(27, pull_up=True), # pin 13
+            '20': DigitalInputDevice(22, pull_up=True), # pin 15
+            '21': DigitalInputDevice(5, pull_up=True),  # pin 29
+            '22': DigitalInputDevice(6, pull_up=True),  # pin 31
+            '23': DigitalInputDevice(26, pull_up=True), # pin 37
+            '24': DigitalInputDevice(25, pull_up=True)  # pin 22
+            # BCM's 23 and 24 are used for the calibration buttons
+        }
+        
+        # Analog mapping is a sequential map of GPIO number to channel
+        #    GPIO 1-8 ->  maps to chip 1, channels 0-7
+        #    GPIO 9-16 -> maps to chip 2, channels 0-7
 
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
@@ -436,13 +538,21 @@ class GpioCtl:
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
         self.load_config('config.txt')
 
+        # Initialize ADCs
+        self.chip1 = [MCP3008(channel=i, device=0) for i in range(8)]
+        self.chip2 = [MCP3008(channel=i, device=1) for i in range(8)]
+        
+        # Initialize OLED
+        try:
+            serial = i2c(port=1, address=0x3C)
+            self.display = ssd1306(serial)
+        except:
+            self.display = None
+            print("OLED not found, continuing without display.")
         
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
         
-        # Connect to the GPIO monitor
-        self.connect()
-
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
@@ -486,6 +596,12 @@ class GpioCtl:
             except Exception as error:
                 sys.exit(f'Specified value for {key.strip()} must be an integer!')
             setattr(self, key.strip(), value_int)
+        elif key.strip() in self.global_floats:
+             try:
+                value_float = float(value.strip())
+            except Exception as error:
+                sys.exit(f'Specified value for {key.strip()} must be a floating point number!')
+            setattr(self, key.strip(), value_float)
         else:
             setattr(self, key.strip(), value.strip())
         if key.strip() in self.global_settings:
@@ -493,63 +609,25 @@ class GpioCtl:
         else:
             self.settings_unexpected.append(key.strip())
 
-    def authenticate(self):
-        self.tn.read_until('User Name: '.encode(),self.connect_timeout)
-        self.tn.write((self.username + '\n').encode())
-        self.tn.read_until('Password: '.encode(), self.connect_timeout)
-        self.tn.write((self.gpio_pw  + '\n').encode())
-        print((self.tn.read_until('>>'.encode())).decode())
-        self.connected = True
-
-    def connect(self):
-        self.tn = telnetlib.Telnet(self.tcp_addr)
-        self.authenticate()
-
-    def attempt_reconnect(self):
-        attempt = 1
-        while attempt < self.reconnect_attempts:
-            dt_string = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
-            print(f"{dt_string} Attempt reconnect in {self.reconnect_delay} seconds...")
-            time.sleep(self.reconnect_delay)
-            try:
-                self.tn.open(self.tcp_addr)
-                self.authenticate()
-                break
-            except Exception as error:
-                print(f"Attempt number {attempt} failed")
-                attempt += 1
-                self.tn.close()
-                self.connected = False
-                if attempt == self.reconnect_attempts:
-                    print(f"Could not reconnect after {attempt} attempts Terminating.")
-                    raise
-        print(f"Successfully reconnected after {attempt} attempts :)")
-
-    def disconnect(self):
-        try:
-            self.tn.write('exit\n'.encode())
-        except Exception as error:
-            print(f"Ignored Exception={error} attempting to disconnect")
-
-    def read_gpio(self, read_type, gpio_num):
-        while True:
-            try:
-                self.tn.write((read_type + f' {gpio_num} \n').encode())
-                result = self.tn.read_until('>'.encode(), self.connect_timeout).decode()
-                rtn_int = int(result.split()[0])
-                break
-            except Exception as error:
-                print(f"Lost connection. Exception={error} reading GPIO!")
-                self.tn.close()
-                self.connected = False
-                self.attempt_reconnect()              
-        return rtn_int
-
     def read_analog(self, gpio_num):
-        return self.read_gpio('adc read', gpio_num)
+        pin = int(gpio_num) - 1
+        # Scale to 1024
+        if pin <= 7:
+            return int(self.chip1[pin].value * 1024)
+        else:
+            return int(self.chip2[pin-8].value * 1024)
 
     def read_digital(self, gpio_num):
-        return self.read_gpio('gpio read', gpio_num)
+        label = str(gpio_num).upper()
+        if label in self.digital_map:
+            return 1 if self.digital_map[label].is_active else 0
+        return 0
+
+    def update_display(self, lines):
+        if self.display:
+            with canvas(self.display) as draw:
+                for idx, line in enumerate(lines):
+                    draw.text((0, idx*14), line, fill="white")
 
     def read_sensors_and_update(self):
         for x in self.my_gpios:
@@ -643,10 +721,16 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
+    cal_btns = CalibrationButtons(ph)
     while True:
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
+            controller.update_display([
+                f"Time: {datetime.datetime.now().strftime('%H:%M')}",
+                f"Temp: {controller.current_temp:.1f} F",
+                f"PH:   {controller.current_ph:.2f}"
+            ])         
             time.sleep(controller.sample_time)
         except KeyboardInterrupt:
             print("User requested termination. Exiting.")
@@ -654,8 +738,6 @@ def main():
         except Exception as error:
             print(f"Exception={error} Unhandled! Exiting")
             raise
-    controller.disconnect()
-
 
 if __name__ == '__main__':
     main()
