@@ -27,7 +27,7 @@ from luma.core.render import canvas
 # MCP3008 Chip 0: Channels 0-7 (Temp, PH, etc.)
 # MCP3008 Chip 1: Channels 8+
 # OLED: I2C Address 0x3C
-# Buttons: GPIO 23 (pH Low Calibrate), GPIO 24 (pH High Calibrate)
+# Buttons: GPIO 25 (pH Low Calibrate), GPIO 26 (pH High Calibrate)
 
 class Gpio:
     def __init__(self, gpio_controller, config_file_data):
@@ -197,52 +197,56 @@ class CO2deliverySensor(GpioDigital):
 class TempSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(TempSensor, self).__init__(gpio_controller, config_file_data)
+        self.current_temp = 0
         self.ema_value = None
-        self.alpha = 0.2  # 20% of new average mixed with 80% previous
-
+        self.alpha = 0.2  # Smoothing factor
+        # Check if this instance is the primary water sensor
+        self.is_water_sensor = "Water" in self.config_info[3].strip()  
+ 
     def read_sensor_and_update(self):
-        # Use parent logic to get the trimmed mean
+        # Get trimmed mean from parent (GpioAnalog)
         super().read_sensor_and_update()
         current_trimmed_mean = self.averaged_sample
 
-        # Apply Exponential Moving Average (EMA)
+        # Apply Exponential Moving Average (EMA) to smooth jitter
         if self.ema_value is None:
             self.ema_value = current_trimmed_mean
         else:
             self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
         
-        # Overwrite the result used for Temperature calculation
-        self.averaged_sample = self.ema_value
+        # Calculate Resistance
+        pad_resistor = float(self.config_info[5].lstrip())
+        if self.ema_value <= 0:
+            self.current_temp = 0
+            return
+
+        # Vout = Vin * (R_pad / (R_therm + R_pad)) -> Solving for R_therm:
+        resistance = ((1024 * pad_resistor / self.ema_value) - pad_resistor)
+        
+        # Steinhart-Hart Equation
+        try:
+            ln_r = math.log(resistance)
+            A, B, C = 1.129148e-3, 2.34125e-4, 8.76741e-8
+            temp_k = 1 / (A + B * ln_r + C * math.pow(ln_r, 3))
+            
+            # Convert Kelvin to Celsius
+            temp_c = temp_k - 273.15
+            # Convert to Fahrenheit
+            temp_f = (temp_c * 9.0) / 5.0 + 32.0
+            
+            # 5. Adjust with calibration offset from config
+            calibration = float(self.config_info[6].lstrip())
+            self.current_temp = temp_f + calibration
+
+            # 6. Update Controller's global display variable
+            if self.is_water_sensor:
+                self.controller.display_temp = self.current_temp
+                
+        except (ValueError, ZeroDivisionError):
+            self.current_temp = 0
 
     def read_value(self):
-        pad_resistor = float(self.config_info[5].lstrip())
-        #[Ground] -- [10k-pad-resistor] -- | -- [thermistor] --[Vcc (5v)]
-        if self.averaged_sample == 0:
-            return 0
-        if self.averaged_sample < 0:
-            return 0
-        resistance = ((1024 * pad_resistor / self.averaged_sample) - pad_resistor)
-
-        #**************************************************************
-        # Utilizes the Steinhart-Hart Thermistor Equation:
-        #    Temperature in Kelvin = 1 / {A + B[ln(R)] + C[ln(R)]^3}
-        #    where A = 0.001129148, B = 0.000234125 and C = 8.76741E-08
-        #**************************************************************
-        ln_r = math.log(resistance)
-        A, B, C = 1.129148e-3, 2.34125e-4, 8.76741e-8
-        temp = 1 / (A + B * ln_r + C * math.pow(ln_r, 3))
-        #Convert from Kelvin the Celsius
-        temp = temp - 273.15
-        # Convert to Fahrenheit.
-        temp = (temp * 9.0) / 5.0 + 32.0
-        # Adjust with calibration value
-        calibration = float(self.config_info[6].lstrip())
-        
-        # Store water temp in controller for display
-        if "Water" in config_info[3].strip():
-            controller.current_temp = temp + calibration
-
-        return temp + calibration
+        return self.current_temp
 
 class RandomFlowSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
@@ -289,6 +293,8 @@ class Battery(GpioAnalog):
         super(Battery, self).__init__(gpio_controller, config_file_data)
         # initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
+        self.config_info5_float = float(self.config_info[5].strip())
+        self.config_info7_float = float(self.config_info[7].strip())
 
     def read_value(self):
         # ---------------------------------------------------------------------------
@@ -303,9 +309,9 @@ class Battery(GpioAnalog):
         return voltage
         
     def read_value_text(self, value):
-        if value > float(self.config_info[5].strip()):
+        if value > self.config_info5_float:
             return f' {self.config_info[6].strip()} ({value:2.1f})'
-        elif value > float(self.config_info[7].strip()):
+        elif value > self.config_info7_float:
             return f' {self.config_info[8].strip()} ({value:2.1f})'
         return f' {self.config_info[9].strip()} ({value:2.1f})'
             
@@ -315,7 +321,8 @@ class Ph(GpioAnalog):
         # This class tracks the max and min values/timestamps and logs PH values every hour
         self.slope = float(self.config_info[5].lstrip())
         self.offset = float(self.config_info[6].lstrip())
-        self.samples = deque([(8.1 * self.slope + self.offset) * 16, maxlen=16)       
+        self.samples = deque([(8.1 * self.slope + self.offset)] * 16, maxlen=16)
+        self.current_ph = 8.0
         self.ema_value = None
         self.alpha = 0.2  # 20% of new average mixed with 80% previous
         self.raw_low = None
@@ -348,26 +355,27 @@ class Ph(GpioAnalog):
             self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)      
         # Overwrite the result used for PH calculation
         self.averaged_sample = self.ema_value
-
-    def read_value(self):
+        
         current_day = datetime.now().day
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
             self.min_max_init()
         
-        ph = (self.averaged_sample - self.offset) / self.slope
+        self.current_ph = (self.averaged_sample - self.offset) / self.slope
         
-        # Record PH in controller for Desplay Panel
-        controller.current_ph = ph
+        # Record PH in controller for Display Panel
+        self.controller.display_ph = self.current_ph
         
         if self.test_active:         
-            if ph > self.max_ph:
-                self.max_ph = ph
+            if self.current_ph > self.max_ph:
+                self.max_ph = self.current_ph
                 self.max_timestamp = datetime.now()
-            if ph < self.min_ph:
-                self.min_ph = ph
+            if self.current_ph < self.min_ph:
+                self.min_ph = self.current_ph
                 self.min_timestamp = datetime.now()
-        return ph
+
+    def read_value(self):
+        return self.current_ph
 
     def min_max_init(self):
         self.max_ph = 4
@@ -406,7 +414,9 @@ class Ph(GpioAnalog):
             self.raw_high = 0
 
     def save_to_config(self):
-        filename = 'config.txt'
+        filename = self.controller.config_path
+        temp_filename = filename.with_suffix('.tmp')
+        backup_filename = filename.with_suffix('.bak')
         updated_lines = []
         
         try:
@@ -431,21 +441,30 @@ class Ph(GpioAnalog):
                 else:
                     updated_lines.append(line)
             
-            # Write the updated content back to the file
-            with open(filename, 'w') as f:
+            # Create a backup of the current good config
+            shutil.copy2(filename, backup_filename)            
+            
+            # Write to temporary file first
+            with open(temp_filename, 'w') as f:
                 f.writelines(updated_lines)
+                f.flush()
+                os.fsync(f.fileno()) # Force write to physical disk
             
+            # Atomic rename
+            os.replace(temp_filename, filename)
             print("Successfully saved new calibration to config.txt")
-            
+        
         except Exception as e:
-            print(f"Error saving calibration: {e}")       
-
+            print(f"Error saving calibration: {e}")
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+                
 class CalibrationButtons:
-    def __init__(self, ph_sensor, controller):
-        self.ph = ph_sensor
+    def __init__(self, ph, controller):
+        self.ph = ph
         self.controller = controller
-        self.btn_low = Button(23, bounce_time=0.1)
-        self.btn_high = Button(24, bounce_time=0.1)
+        self.btn_low = Button(25, hold_time=4)
+        self.btn_high = Button(26, hold_time=4)
         
         self.btn_low.when_pressed = lambda: self.ph.calibrate(controller.ph_calibrate_low)
         self.btn_high.when_pressed = lambda: self.ph.calibrate(controller.ph_calibrate_high)
@@ -462,10 +481,10 @@ class GpioCtl:
         self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
         self.display_ph = 0.0
         self.display_temp = 0.0
+        self.config_path = Path(__file__).parent / 'config.txt'
         
         # List of required environment variables
         required_vars = {
-            'gpio_pw': 'AQUAMON_GPIO_PW',
             'me': 'AQUAMON_EMAIL',
             'email_pw': 'AQUAMON_EMAIL_PW',
             'recipients': 'AQUAMON_RECIPIENTS'
@@ -507,23 +526,28 @@ class GpioCtl:
             'local_filepath'
         ]           
 
-        # Digital Pin Mapping (Hex from config -> Pi GPIO)
+        # Digital port, GPIO, pin mapping
         self.digital_map = {
-            # config GPIO Number,  Raspberry PI BCM Number
-            '17': DigitalInputDevice(4, pull_up=True),  # pin 7
-            '18': DigitalInputDevice(17, pull_up=True), # pin 11
-            '19': DigitalInputDevice(27, pull_up=True), # pin 13
-            '20': DigitalInputDevice(22, pull_up=True), # pin 15
-            '21': DigitalInputDevice(5, pull_up=True),  # pin 29
-            '22': DigitalInputDevice(6, pull_up=True),  # pin 31
-            '23': DigitalInputDevice(26, pull_up=True), # pin 37
-            '24': DigitalInputDevice(25, pull_up=True)  # pin 22
-            # BCM's 23 and 24 are used for the calibration buttons
+            # Monitor port Number, Raspberry PI BCM(GPIO) Number
+            '14': DigitalInputDevice(27, pull_up=True), # Raspberry pin 13
+            '15': DigitalInputDevice(4,  pull_up=True), # Raspberry pin 7
+            '16': DigitalInputDevice(16, pull_up=True), # Raspberry pin 36
+            '17': DigitalInputDevice(17, pull_up=True), # Raspberry pin 11
+            '18': DigitalInputDevice(18, pull_up=True), # Raspberry pin 12
+            '19': DigitalInputDevice(19, pull_up=True), # Raspberry pin 35
+            '20': DigitalInputDevice(20, pull_up=True), # Raspberry pin 38
+            '21': DigitalInputDevice(5,  pull_up=True), # Raspberry pin 29
+            '22': DigitalInputDevice(22, pull_up=True), # Raspberry pin 15
+            '23': DigitalInputDevice(23, pull_up=True), # Raspberry pin 16
+            '24': DigitalInputDevice(24, pull_up=True)  # Raspberry pin 18
+            
+            # BCMs(GPIOs) 25 and 26 are used for the calibration buttons
+            # BCM(GPIO) 21 (pin 40) used for system restart
         }
         
         # Analog mapping is a sequential map of GPIO number to channel
-        #    GPIO 1-8 ->  maps to chip 1, channels 0-7
-        #    GPIO 9-16 -> maps to chip 2, channels 0-7
+        #    Monitor port number 1-8 ->  maps to chip 1, channels 0-7
+        #    Monitor port number 9-13 -> maps to chip 2, channels 0-4
 
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
@@ -536,7 +560,7 @@ class GpioCtl:
         
         # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
-        self.load_config('config.txt')
+        self.load_config(self.config_path)
 
         # Initialize ADCs
         self.chip1 = [MCP3008(channel=i, device=0) for i in range(8)]
@@ -557,30 +581,29 @@ class GpioCtl:
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
                 # Handle global configuration settings
-                line = line.strip()
-                if not line or line[0] == '#' or '=' in line:
+                clean_line = line.strip()
+                if not clean_line or clean_line.startswith('#'):
+                    continue
+                if '=' in clean_line:
                     # Handle global settings (username, password, etc.)
-                    if '=' in line:
-                        self.parse_setting(line)
+                    self.parse_setting(clean_line)
+                elif ',' in clean_line:
+                    # Handle sensor instantiations
+                    parts = [p.strip() for p in clean_line.split(',')]
+                    prefix = parts[0].lower()
+                
+                    # Check if the prefix matches one of our known sensor types
+                    for key, sensor_class in self.SENSOR_MAP.items():
+                        if prefix.startswith(key):
+                            self.my_gpios.append(sensor_class(self, parts))
+                            break
+                                
             # Define the base directory using pathlib
             self.base_path = Path(self.local_filepath) / self.cloud_store
         
             # Ensure the directory exists (create it if it doesn't)
             self.base_path.mkdir(parents=True, exist_ok=True)  
 
-            # Move through the file again, this time collecting sensor configuration
-            gpio_config.seek(0)
-            
-            for line in gpio_config: 
-                # Handle sensor instantiations
-                parts = line.split(',')
-                prefix = parts[0].lower()
-                
-                # Check if the prefix matches one of our known sensor types
-                for key, sensor_class in self.SENSOR_MAP.items():
-                    if prefix.startswith(key):
-                        self.my_gpios.append(sensor_class(self, parts))
-                        break
             if self.settings_unexpected:
                 print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")            
             self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
@@ -611,14 +634,14 @@ class GpioCtl:
 
     def read_analog(self, gpio_num):
         pin = int(gpio_num) - 1
-        # Scale to 1024
+        # Scale to 1023
         if pin <= 7:
-            return int(self.chip1[pin].value * 1024)
+            return int(self.chip1[pin].value * 1023)
         else:
-            return int(self.chip2[pin-8].value * 1024)
+            return int(self.chip2[pin-8].value * 1023)
 
     def read_digital(self, gpio_num):
-        label = str(gpio_num).upper()
+        label = str(gpio_num).strip()
         if label in self.digital_map:
             return 1 if self.digital_map[label].is_active else 0
         return 0
@@ -715,21 +738,32 @@ def ensure_single_instance(port=65432):
     except socket.error:
         print("--- ERROR: Aquarium Monitor is already running! ---")
         sys.exit(1)
+
+def system_reboot():
+    print("Rebooting system...")
+    # This command tells Linux to reboot immediately
+    subprocess.run(['sudo', 'reboot'])
         
 def main():
     print("Starting Aquarium Monitor ...")
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    cal_btns = CalibrationButtons(ph)
+    reboot_btn = Button(21, hold_time=3)
+    reboot_btn.when_held = system_reboot    
+    # Find the Ph object in the list of initialized sensors
+    ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
+    if ph_sensor:
+        cal_btns = CalibrationButtons(ph_sensor, controller)
+    
     while True:
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
             controller.update_display([
-                f"Time: {datetime.datetime.now().strftime('%H:%M')}",
-                f"Temp: {controller.current_temp:.1f} F",
-                f"PH:   {controller.current_ph:.2f}"
+                f"Time: {datetime.now().strftime('%H:%M')}",
+                f"Temp: {controller.display_temp:.1f} F",
+                f"PH:   {controller.display_ph:.2f}"
             ])         
             time.sleep(controller.sample_time)
         except KeyboardInterrupt:

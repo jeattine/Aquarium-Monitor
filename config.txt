@@ -1,5 +1,5 @@
 #------------------------------------------------------------------------------------
-#Class, Gpio,Nag,Label,                Condition,        Class specific parms
+#Class, Port, Nag, Label,              Condition,        Class specific parms
 #------------------------------------------------------------------------------------
 #
 #####################  a n a l o g  s e n s o r  s e c t i o n  ######################
@@ -16,28 +16,29 @@ hilow,   9,  1,  Sump Water Level,     14:20-14:00?256-768, Low, High, Ok
 #gpioa, 11,  1,  (unused analog),      NA,               NA          
 #gpioa, 12,  1,  (unused analog),      NA,               NA          
 #gpioa, 13,  1,  (unused analog),      NA,               NA          
-#gpioa, 14,  1,  (unused analog),      NA,               NA
-#gpioa, 15,  1,  (unused analog),      NA,               NA 
-#gpioa, 16,  1,  (unused analog),      NA,               NA  
 #
-###################  d  i g i t a l   s e n s o r   s e c t i o n  ###################         
-gpiod,  17,  2,  Return Pump Flow,     14:20-14:00?0,    Running, Shutdown
-gpiod,  18,  4,  Overflow box level,   1,                High, Ok
-gpiod,  19,  2,  Conditional Power,    14:20-14:00?0,    On, Off
-gpiod,  20,  8,  Protein Skimmer,      1,                Full, Ok
-gpiod,  21,  4,  Top-off reservoir,    0,                Ok,  Low
-floor,  22,  1,  Floor,                1,                Wet, Dry
-#gpiod, 23,  8,  (unused digital),     0,                NA, NA
-#gpiod, 24,  8,  (unused digital),     0,                NA, NA
+###################  d  i g i t a l   s e n s o r   s e c t i o n  ################### 
+gpiod,  14,  2,  Return Pump Flow,     14:20-14:00?0,    Running, Shutdown
+gpiod,  15,  4,  Overflow box level,   1,                High, Ok
+gpiod,  16,  2,  Conditional Power,    14:20-14:00?0,    On, Off
+gpiod,  17,  8,  Protein Skimmer,      1,                Full, Ok
+gpiod,  18,  4,  Top-off reservoir,    0,                Ok,  Low
+floor,  19,  1,  Floor,                1,                Wet, Dry
+#gpiod, 20,  8,  (unused digital),     NA,               NA
+#gpiod, 21,  8,  (unused digital),     NA,               NA
+#gpiod, 22,  1,  (unused digital),     NA,               NA
+#gpiod, 23,  1,  (unused digital),     NA,               NA 
+#gpiod, 24,  1,  (unused digital),     NA,               NA         
 #
-# Notes: 1. Gpio's 1,2 are wired special for temperature sensing:
+#
+# Notes: 1. Ports 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
-#           Gpio's 3,4 do not have pull-up resistors. Used for ext voltage sensing
-#           All other inputs are wired with a 10K pull-up resistor
-#        2. Gpio's 1-16 are analog interfaces and only support analog class objects
-#        3. Gpio's 17-24 are digital interfaces and only support digital class objects
+#           Ports 3,4 do not have pull-up resistors. Used for PH and voltage sensing
+#           All other ports are wired with a 10K pull-up resistor
+#        2. Ports 1-13 are analog interfaces and only support analog class objects
+#        3. Ports 14-24 are digital interfaces and only support digital class objects
 #        4. 'Nag' is the number of hours before sending another alert for 
-#           a specific GPIO condition violation that has not cleared.
+#           a specific condition violation that has not cleared.
 #      
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
@@ -53,9 +54,9 @@ server_update_freq=60
 # Seconds between sampling the GPIO device inputs
 sample_time=4
 # PH high calibration solution at 21 C
-ph_calibration_high=9.23
+ph_calibrate_high=9.23
 # PH low calibration solution at 21 C
-ph_calibration_low=6.88
+ph_calibrate_low=6.88
 # smtp server to use for sending alerts
 smtp=smtp.gmail.com
 # Subject line in the alert email
@@ -70,7 +71,7 @@ local_filepath=/home/usr/
 #  AQUAMON_EMAIL: The 'from' address of the alert email sent by the monitor
 #  AQUAMON_EMAIL_PW: The SMTP password for sending the alert email
 #  AQUAMON_RECIPIENTS: Comma separated email list to be sent alerts
-
+#
 
 
 
