@@ -463,11 +463,11 @@ class CalibrationButtons:
     def __init__(self, ph, controller):
         self.ph = ph
         self.controller = controller
-        self.btn_low = Button(25, hold_time=4)
-        self.btn_high = Button(26, hold_time=4)
+        self.btn_low = Button(25, hold_time=3)
+        self.btn_high = Button(27, hold_time=3)
         
-        self.btn_low.when_pressed = lambda: self.ph.calibrate(controller.ph_calibrate_low)
-        self.btn_high.when_pressed = lambda: self.ph.calibrate(controller.ph_calibrate_high)
+        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low)
+        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high)
 
 class GpioCtl:
     def __init__(self):
@@ -529,20 +529,21 @@ class GpioCtl:
         # Digital port, GPIO, pin mapping
         self.digital_map = {
             # Monitor port Number, Raspberry PI BCM(GPIO) Number
-            '14': DigitalInputDevice(27, pull_up=True), # Raspberry pin 13
-            '15': DigitalInputDevice(4,  pull_up=True), # Raspberry pin 7
+            '14': DigitalInputDevice(4,  pull_up=True), # Raspberry pin 7
+            '15': DigitalInputDevice(5,  pull_up=True), # Raspberry pin 29
             '16': DigitalInputDevice(16, pull_up=True), # Raspberry pin 36
             '17': DigitalInputDevice(17, pull_up=True), # Raspberry pin 11
             '18': DigitalInputDevice(18, pull_up=True), # Raspberry pin 12
             '19': DigitalInputDevice(19, pull_up=True), # Raspberry pin 35
             '20': DigitalInputDevice(20, pull_up=True), # Raspberry pin 38
-            '21': DigitalInputDevice(5,  pull_up=True), # Raspberry pin 29
+            '21': DigitalInputDevice(21, pull_up=True), # Raspberry pin 40
             '22': DigitalInputDevice(22, pull_up=True), # Raspberry pin 15
             '23': DigitalInputDevice(23, pull_up=True), # Raspberry pin 16
             '24': DigitalInputDevice(24, pull_up=True)  # Raspberry pin 18
             
-            # BCMs(GPIOs) 25 and 26 are used for the calibration buttons
-            # BCM(GPIO) 21 (pin 40) used for system restart
+            # GPIOs 25 (pin 22) and 27 (pin 13) are used for the calibration buttons
+            # GPIO 6 (pin 31) used for system restart        
+            
         }
         
         # Analog mapping is a sequential map of GPIO number to channel
@@ -749,7 +750,7 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    reboot_btn = Button(21, hold_time=3)
+    reboot_btn = Button(6, hold_time=3)
     reboot_btn.when_held = system_reboot    
     # Find the Ph object in the list of initialized sensors
     ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
