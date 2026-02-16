@@ -43,12 +43,6 @@ floor,  19,  1,  Floor,                1,                Wet, Dry
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
 #------------------------------------------------------------------------------------
-# Seconds to wait for a responses from the GPIO device
-connect_timeout=6
-# Seconds to wait before attempting a reconnect
-reconnect_delay=120
-# Number of times to attempt a reconnect before exiting
-reconnect_attempts=60
 # Seconds between updates of the cloud-based status file
 server_update_freq=60
 # Seconds between sampling the GPIO device inputs

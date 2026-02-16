@@ -505,9 +505,6 @@ class GpioCtl:
         }
         # Global integer settings
         self.global_integers = [
-            'connect_timeout',
-            'reconnect_delay',
-            'reconnect_attempts',
             'server_update_freq',
             'sample_time'
         ]    
