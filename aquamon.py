@@ -409,7 +409,7 @@ class Ph(GpioAnalog):
             self.slope = (self.raw_high - self.raw_low) /  (self.controller.ph_calibrate_high - self.controller.ph_calibrate_low)
             self.offset = self.controller.ph_calibrate_low - (self.raw_low / self.slope)
             self.save_to_config()
-            # Reset the stored calibration data to allow re-calibration
+            # Reset the stored calibration data to allow future re-calibration
             self.raw_low = 0
             self.raw_high = 0
 
@@ -486,8 +486,7 @@ class GpioCtl:
         # List of required environment variables
         required_vars = {
             'me': 'AQUAMON_EMAIL',
-            'email_pw': 'AQUAMON_EMAIL_PW',
-            'recipients': 'AQUAMON_RECIPIENTS'
+            'email_pw': 'AQUAMON_EMAIL_PW'
         }
         # Mapping config keys to Class names
         self.SENSOR_MAP = {
@@ -520,7 +519,8 @@ class GpioCtl:
             'smtp',
             'email_subject',
             'cloud_store',
-            'local_filepath'
+            'local_filepath',
+            'email_recipients'
         ]           
 
         # Digital port, GPIO, pin mapping
@@ -553,12 +553,12 @@ class GpioCtl:
             if value is None:
                 sys.exit(f"Critical Error: {env_var} is not set.")
             setattr(self, attr, value)        
-
-        print(f"Alerts will be sent to the following recipients: {self.recipients}")
-        
+      
         # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
         self.load_config(self.config_path)
+        
+        print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
 
         # Initialize ADCs
         self.chip1 = [MCP3008(channel=i, device=0) for i in range(8)]
@@ -658,7 +658,7 @@ class GpioCtl:
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
         outer['From'] = self.me
-        outer['To'] = self.recipients
+        outer['To'] = self.email_recipients
         # Add the alert message
         msg = MIMEText("\n".join(self.email_text))
         outer.attach(msg)
@@ -684,7 +684,7 @@ class GpioCtl:
                 server.ehlo()
                 server.starttls()
                 server.login(self.me, self.email_pw)
-                server.sendmail(self.me, self.recipients.split(','), outer.as_string())
+                server.sendmail(self.me, self.email_recipients.split(','), outer.as_string())
         except Exception as error:
             print(f"Exception={error} Error sending alert!: {msg}")
         # Initialize for next alert

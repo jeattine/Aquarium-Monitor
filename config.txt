@@ -1,7 +1,6 @@
 #------------------------------------------------------------------------------------
-#Class, Port, Nag, Label,              Condition,        Class specific parms
+#Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
-#
 #####################  a n a l o g  s e n s o r  s e c t i o n  ######################
 temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
 temp,    2, 12,  Room Temp,            60-82,            10020, -0.4 
@@ -55,16 +54,17 @@ ph_calibrate_low=6.88
 smtp=smtp.gmail.com
 # Subject line in the alert email
 email_subject=Alert from Attinella aquarium
+# Comma separated list of email recipients
+email_recipients=john.attinella@gmail.com
 # Location to store status
 cloud_store=Aquarium/aquamonitor/status
 # Local base filepath 
 local_filepath=/home/usr/
 #--------------------------------------------------------------------------------
-#  Expected Environment Variables
+#  Required Environment Variables
 #--------------------------------------------------------------------------------
 #  AQUAMON_EMAIL: The 'from' address of the alert email sent by the monitor
 #  AQUAMON_EMAIL_PW: The SMTP password for sending the alert email
-#  AQUAMON_RECIPIENTS: Comma separated email list to be sent alerts
 #
 
 
