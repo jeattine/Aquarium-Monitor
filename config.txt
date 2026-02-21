@@ -56,10 +56,8 @@ smtp=smtp.gmail.com
 email_subject=Alert from Attinella aquarium
 # Comma separated list of email recipients
 email_recipients=john.attinella@gmail.com
-# Location to store status
-cloud_store=Aquarium/aquamonitor/status
-# Local base filepath 
-local_filepath=/home/usr/
+# Location to store status (rclone to cloud storage) 
+cloud_store_filepath=/home/aquamon/reef_monitor/status
 #--------------------------------------------------------------------------------
 #  Required Environment Variables
 #--------------------------------------------------------------------------------

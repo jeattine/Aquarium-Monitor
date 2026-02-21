@@ -12,13 +12,14 @@ import statistics
 import logging
 import socket
 import subprocess
+import spidev
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from collections import deque
-from gpiozero import MCP3008, DigitalInputDevice, Button
+from gpiozero import DigitalInputDevice, Button
 from luma.core.interface.serial import i2c
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
@@ -124,7 +125,7 @@ class GpioAnalog(Gpio):
         # Create a running averaged sample dumping the 1/8th highest and 1/8th lowest samples
         if self.enable_averaging:
             temp_samples = sorted(list(self.samples))
-            # Trim 25% lowest and 25% highest
+            # Trim 12.5% lowest and 12.5% highest
             trim_low = int(len(temp_samples)/8)
             trim_high = int(len(temp_samples)) - trim_low
             temp_samples = temp_samples[trim_low:trim_high]
@@ -215,7 +216,7 @@ class TempSensor(GpioAnalog):
             self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
         
         # Calculate Resistance
-        pad_resistor = float(self.config_info[5].lstrip())
+        pad_resistor = float(self.config_info[5].strip())
         if self.ema_value <= 0:
             self.current_temp = 0
             return
@@ -518,8 +519,7 @@ class GpioCtl:
         self.global_settings = self.global_integers + self.global_floats + [
             'smtp',
             'email_subject',
-            'cloud_store',
-            'local_filepath',
+            'cloud_store_filepath',
             'email_recipients'
         ]           
 
@@ -560,10 +560,18 @@ class GpioCtl:
         
         print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
 
-        # Initialize ADCs
-        self.chip1 = [MCP3008(channel=i, device=0) for i in range(8)]
-        self.chip2 = [MCP3008(channel=i, device=1) for i in range(8)]
-        
+        # Initialize SPI Hardware
+        try:
+            self.spi = spidev.SpiDev()
+            self.spi.open(0, 0) # Chip 1 (CE0)
+            self.spi.max_speed_hz = 500000
+
+            self.spi2 = spidev.SpiDev()
+            self.spi2.open(0, 1) # Chip 2 (CE1)
+            self.spi2.max_speed_hz = 500000   
+        except Exception as e:
+            sys.exit(f"Critical Error: Could not initialize SPI bus. {e}")
+            
         # Initialize OLED
         try:
             serial = i2c(port=1, address=0x3C)
@@ -574,6 +582,17 @@ class GpioCtl:
         
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
+
+    def __del__(self):
+        """Clean up hardware resources on exit"""
+        try:
+            if hasattr(self, 'spi0'):
+                self.spi0.close()
+            if hasattr(self, 'spi1'):
+                self.spi1.close()
+            print("SPI buses closed successfully.")
+        except Exception as e:
+            print(f"Error during hardware cleanup: {e}")
         
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
@@ -597,7 +616,10 @@ class GpioCtl:
                             break
                                 
             # Define the base directory using pathlib
-            self.base_path = Path(self.local_filepath) / self.cloud_store
+            self.base_path = Path(self.cloud_store_filepath)
+            
+            # Define the path to the shared cloud copy of the config file
+            self.config_path_cloud = self.base_path / 'config.txt'
         
             # Ensure the directory exists (create it if it doesn't)
             self.base_path.mkdir(parents=True, exist_ok=True)  
@@ -631,13 +653,26 @@ class GpioCtl:
             self.settings_unexpected.append(key.strip())
 
     def read_analog(self, gpio_num):
-        pin = int(gpio_num) - 1
-        # Scale to 1023
-        if pin <= 7:
-            return int(self.chip1[pin].value * 1023)
+        # Reads raw 0-1023 value from MCP3008 using spidev
+        port = int(gpio_num)
+    
+        # Determine which chip and which channel (0-7)
+        if port <= 8:
+            bus = self.spi0
+            channel = port - 1
         else:
-            return int(self.chip2[pin-8].value * 1023)
+            bus = self.spi2
+            channel = port - 9  # Ports 9-16 map to channels 0-7 on chip 2
 
+        # Perform SPI transaction
+        # [1, (8+channel) << 4, 0] is the standard MCP3008 request pattern
+        reply = bus.xfer2([1, (8 + channel) << 4, 0])
+        
+        # Construct the 10-bit integer from the 3-byte response
+        # (reply[1] & 3) extracts the two 'null/high' bits
+        # reply[2] is the remaining 8 bits
+        return ((reply[1] & 3) << 8) + reply[2]
+        
     def read_digital(self, gpio_num):
         label = str(gpio_num).strip()
         if label in self.digital_map:
@@ -691,9 +726,11 @@ class GpioCtl:
         self.email_text[:] = []
 
     def test_and_report(self):
-        # store the status file to the cloud drive based on the update frequency
-        self.report_calls += 1
         
+        self.report_calls += 1
+        for gpio in self.my_gpios:
+            gpio_current_values = [gpio.test() for gpio in self.my_gpios]
+            
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
             curDateTimeRaw = datetime.now()
@@ -702,19 +739,35 @@ class GpioCtl:
             with status_file_path.open('w') as status_file:
                 status_file.write(f'Sample time: {curDateTime}\n')
                 status_file.write(f'Monitor start time: {self.start_time_str}\n')
-                for gpio in self.my_gpios:
-                    current_value = gpio.test()
-                    status_file.write(f'{gpio.read_label()}:{gpio.read_value_text(current_value)}\n')
+                
+                for gpio, current_val in zip(self.my_gpios, gpio_current_values):
+                    status_file.write(f'{gpio.read_label()}:{gpio.read_value_text(current_val)}\n')
                     try:
-                        gpio.log(current_value)
+                        gpio.log(current_val)
                     except Exception as logerr:
                         print(f"Exception={logerr} Error making log entry for {gpio.read_label()}!")
-        if self.email_text:
-            alerts = ", ".join(self.email_text)
-            clean_alerts = alerts.replace("\n", "")
-            print(f"{curDateTime}: {clean_alerts}")
-            self.send_email_alert()
-
+            if self.email_text:
+                alerts = ", ".join(self.email_text)
+                clean_alerts = alerts.replace("\n", "")
+                print(f"{curDateTime}: {clean_alerts}")
+                self.send_email_alert() 
+            
+            self.sync_to_cloud(self)
+            
+    def sync_to_cloud(self):
+        """Uploads status to Dropbox using the rclone API"""
+        # Ensure base_path is a Path object (using pathlib)
+        local_file = str(self.base_path / 'current.txt')
+        remote_dest = "dropbox:ReefMonitor/current.txt"
+        
+        try:
+            # We use --quiet to keep the logs clean during normal operation
+            subprocess.run(['rclone', 'copyto', local_file, remote_dest, '--quiet'], check=True)
+            # print("Cloud sync successful.") # Uncomment for debugging
+        except subprocess.CalledProcessError as e:
+            # Internet likely down if we reach here.
+            print(f"Cloud Sync Failed: {e}")            
+ 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
         try:
@@ -747,7 +800,7 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    reboot_btn = Button(6, hold_time=3)
+    reboot_btn = Button(6, hold_time=10)
     reboot_btn.when_held = system_reboot    
     # Find the Ph object in the list of initialized sensors
     ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
