@@ -16,6 +16,7 @@ import spidev
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
+from zoneinfo import ZoneInfo, available_timezones
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from collections import deque
@@ -83,7 +84,7 @@ class Gpio:
         return current_value
 
     def in_time_range(self, time_start, time_end):
-        now = datetime.now().time()
+        now = self.controller.convert_to_local_time(datetime.now()).time()
         start = datetime.strptime(time_start, "%H:%M").time()
         end = datetime.strptime(time_end, "%H:%M").time()
     
@@ -331,18 +332,23 @@ class Ph(GpioAnalog):
 
         self.min_max_init()
         self.log_stamp = datetime.now().hour   
-        log_path = self.controller.base_path / 'phlog.txt'
+        log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
         
+        def log_converter(*args):
+            return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.controller.timezone)).timetuple()            
+  
         # Avoid adding multiple log handlers if the class is re-instantiated
         if not self.ph_logger.handlers:
-            # Keep 5 backup files, each max 1MB
-            handler = RotatingFileHandler(log_path, maxBytes=10**6, backupCount=5)
+            # Keep 5 backup files, each max 10K
+            handler = RotatingFileHandler(log_path, maxBytes=10**4, backupCount=5)
             # Standard CSV-like format: Time,Value
             formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-            handler.setFormatter(formatter)
-            self.ph_logger.addHandler(handler)    
+            handler.setFormatter(formatter)    
+            
+            handler.formatter.converter = log_converter
+            self.ph_logger.addHandler(handler) 
         
     def read_sensor_and_update(self):
         # Use parent class logic to get the trimmed mean
@@ -389,13 +395,17 @@ class Ph(GpioAnalog):
         current_hour = datetime.now().hour
         if current_hour != self.log_stamp:
             # Logging library handles the timestamp and file writing
-            self.ph_logger.info(f"{value:2.1f}")
+            self.ph_logger.info(f" {value:2.1f}")
             self.log_stamp = current_hour
+            local_file = self.controller.local_phlog_path
+            remote_file = self.controller.dropbox_phlog_path
+            # Write the log file out to the cloud            
+            self.controller.sync_to_cloud(local_file, remote_file)
             
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
-        min_ts = self.min_timestamp.strftime("%I:%M %p")
-        max_ts = self.max_timestamp.strftime("%I:%M %p")
+        min_ts = self.controller.convert_to_local_time(self.min_timestamp).strftime("%I:%M %p")
+        max_ts = self.controller.convert_to_local_time(self.max_timestamp).strftime("%I:%M %p")
         return f'{value:2.1f}  max:{self.max_ph:3.1f} at {max_ts}  min:{self.min_ph:3.1f} at {min_ts}'
 
     def calibrate(self, target):
@@ -415,7 +425,8 @@ class Ph(GpioAnalog):
             self.raw_high = 0
 
     def save_to_config(self):
-        filename = self.controller.config_path
+        filename = self.controller.local_config_path
+        remote_filename = self.controller.dropbox_config_path
         temp_filename = filename.with_suffix('.tmp')
         backup_filename = filename.with_suffix('.bak')
         updated_lines = []
@@ -459,7 +470,10 @@ class Ph(GpioAnalog):
             print(f"Error saving calibration: {e}")
             if os.path.exists(temp_filename):
                 os.remove(temp_filename)
-                
+        
+        # Push the updated config to cloud
+        self.controller.sync_to_cloud(filename, remote_filename)
+        
 class CalibrationButtons:
     def __init__(self, ph, controller):
         self.ph = ph
@@ -479,10 +493,15 @@ class GpioCtl:
         self.settings_unexpected = []
         self.settings_missing = []
         self.start_time = datetime.now()
-        self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")
+        self.start_time_str = None 
         self.display_ph = 0.0
         self.display_temp = 0.0
-        self.config_path = Path(__file__).parent / 'config.txt'
+        self.local_config_path = Path(__file__).parent / 'config.txt'
+        self.local_status_path = Path(__file__).parent / 'current.txt'
+        self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
+        self.dropbox_status_path = None
+        self.dropbox_config_path = None
+        self.dropbox_phlog_path = None
         
         # List of required environment variables
         required_vars = {
@@ -519,9 +538,17 @@ class GpioCtl:
         self.global_settings = self.global_integers + self.global_floats + [
             'smtp',
             'email_subject',
-            'cloud_store_filepath',
+            'cloud_path',
+            'cloud_provider',
+            'timezone',
             'email_recipients'
         ]           
+
+        # Supported cloud providers
+        self.cloud_providers = [
+            'dropbox',
+            'onedrive'
+        ]
 
         # Digital port, GPIO, pin mapping
         self.digital_map = {
@@ -543,9 +570,10 @@ class GpioCtl:
             
         }
         
-        # Analog mapping is a sequential map of GPIO number to channel
-        #    Monitor port number 1-8 ->  maps to chip 1, channels 0-7
-        #    Monitor port number 9-13 -> maps to chip 2, channels 0-4
+        # Analog mapping is a sequential map of port numbers to channels
+        #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
+        #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
+        #    MCP3008 chip 2 channels 5-7 are currently not configured
 
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
@@ -556,15 +584,15 @@ class GpioCtl:
       
         # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
-        self.load_config(self.config_path)
+        self.load_config(self.local_config_path)
         
         print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
 
         # Initialize SPI Hardware
         try:
-            self.spi = spidev.SpiDev()
-            self.spi.open(0, 0) # Chip 1 (CE0)
-            self.spi.max_speed_hz = 500000
+            self.spi1 = spidev.SpiDev()
+            self.spi1.open(0, 0) # Chip 1 (CE0)
+            self.spi1.max_speed_hz = 500000
 
             self.spi2 = spidev.SpiDev()
             self.spi2.open(0, 1) # Chip 2 (CE1)
@@ -587,13 +615,13 @@ class GpioCtl:
         """Clean up hardware resources on exit"""
         try:
             if hasattr(self, 'spi0'):
-                self.spi0.close()
-            if hasattr(self, 'spi1'):
                 self.spi1.close()
+            if hasattr(self, 'spi1'):
+                self.spi2.close()
             print("SPI buses closed successfully.")
         except Exception as e:
             print(f"Error during hardware cleanup: {e}")
-        
+       
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
@@ -615,20 +643,31 @@ class GpioCtl:
                             self.my_gpios.append(sensor_class(self, parts))
                             break
                                 
-            # Define the base directory using pathlib
-            self.base_path = Path(self.cloud_store_filepath)
-            
-            # Define the path to the shared cloud copy of the config file
-            self.config_path_cloud = self.base_path / 'config.txt'
-        
-            # Ensure the directory exists (create it if it doesn't)
-            self.base_path.mkdir(parents=True, exist_ok=True)  
-
             if self.settings_unexpected:
                 print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")            
             self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
             if self.settings_missing:
                 sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
+
+            # See if a valid timezone was specified. Expecting a valid IANA name
+            valid_zones = available_timezones()
+            if self.timezone not in valid_zones:
+                print(f"Warning: unknown timezone was specified: {self.timezone}. Defaulting to UTC")
+                self.timezone = 'UTC'
+
+            # Test for supported cloud providers
+            self.cloud_provider = self.cloud_provider.lower()
+            if self.cloud_provider not in self.cloud_providers:
+                print(f"Warning: unsupported cloud provider: {self.cloud_provider}.") 
+
+            # Define destination file paths (can't use Path object for cloud destinations)
+            drop_box_path_sanitized = self.cloud_path.strip('/')
+            self.dropbox_status_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/current.txt"
+            self.dropbox_config_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/config.txt"
+            self.dropbox_phlog_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/phlog.txt"
+
+            # Initialize the start time string now that we have the timezone info
+            self.start_time_str = self.get_local_timestamp()     
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
@@ -640,7 +679,7 @@ class GpioCtl:
                 sys.exit(f'Specified value for {key.strip()} must be an integer!')
             setattr(self, key.strip(), value_int)
         elif key.strip() in self.global_floats:
-             try:
+            try:
                 value_float = float(value.strip())
             except Exception as error:
                 sys.exit(f'Specified value for {key.strip()} must be a floating point number!')
@@ -652,13 +691,24 @@ class GpioCtl:
         else:
             self.settings_unexpected.append(key.strip())
 
+    def convert_to_local_time(self, utc_time):
+        local_tz = ZoneInfo(self.timezone)
+        local_time = utc_time.astimezone(local_tz)
+        return local_time
+
+    def get_local_timestamp(self):
+        """Returns a timestamp string in the configured timezone"""
+        utc_now = datetime.now(ZoneInfo("UTC"))
+        local_now = self.convert_to_local_time(utc_now)
+        return local_now.strftime("%A %B %d %I:%M:%S %p")
+
     def read_analog(self, gpio_num):
         # Reads raw 0-1023 value from MCP3008 using spidev
         port = int(gpio_num)
     
         # Determine which chip and which channel (0-7)
         if port <= 8:
-            bus = self.spi0
+            bus = self.spi1
             channel = port - 1
         else:
             bus = self.spi2
@@ -699,7 +749,7 @@ class GpioCtl:
         outer.attach(msg)
 
         # Path to current status
-        status_file = self.base_path / 'current.txt'
+        status_file = self.local_status_path
 
         # Attach the current status information
         try:
@@ -710,7 +760,7 @@ class GpioCtl:
             print("Warning: current.txt not found for email attachment.")
 
         # Add a link to check the current status
-        email_link = MIMEText(self.cloud_store + 'current.txt\n')
+        email_link = MIMEText(f"{self.dropbox_status_path}\n")
         outer.attach(email_link)
       
         # Send the email
@@ -733,11 +783,10 @@ class GpioCtl:
             
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
-            curDateTimeRaw = datetime.now()
-            curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
-            status_file_path = self.base_path / 'current.txt'
+            cur_date_time = self.get_local_timestamp()
+            status_file_path = self.local_status_path
             with status_file_path.open('w') as status_file:
-                status_file.write(f'Sample time: {curDateTime}\n')
+                status_file.write(f'Sample time: {cur_date_time}\n')
                 status_file.write(f'Monitor start time: {self.start_time_str}\n')
                 
                 for gpio, current_val in zip(self.my_gpios, gpio_current_values):
@@ -749,16 +798,13 @@ class GpioCtl:
             if self.email_text:
                 alerts = ", ".join(self.email_text)
                 clean_alerts = alerts.replace("\n", "")
-                print(f"{curDateTime}: {clean_alerts}")
+                print(f"{cur_date_time}: {clean_alerts}")
                 self.send_email_alert() 
             
-            self.sync_to_cloud(self)
+            self.sync_to_cloud(self.local_status_path, self.dropbox_status_path)
             
-    def sync_to_cloud(self):
+    def sync_to_cloud(self, local_file, remote_dest):
         """Uploads status to Dropbox using the rclone API"""
-        # Ensure base_path is a Path object (using pathlib)
-        local_file = str(self.base_path / 'current.txt')
-        remote_dest = "dropbox:ReefMonitor/current.txt"
         
         try:
             # We use --quiet to keep the logs clean during normal operation
@@ -766,7 +812,7 @@ class GpioCtl:
             # print("Cloud sync successful.") # Uncomment for debugging
         except subprocess.CalledProcessError as e:
             # Internet likely down if we reach here.
-            print(f"Cloud Sync Failed: {e}")            
+            print(f"Cloud Sync to {remote_dest} Failed : {e}")            
  
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
@@ -790,18 +836,11 @@ def ensure_single_instance(port=65432):
         print("--- ERROR: Aquarium Monitor is already running! ---")
         sys.exit(1)
 
-def system_reboot():
-    print("Rebooting system...")
-    # This command tells Linux to reboot immediately
-    subprocess.run(['sudo', 'reboot'])
-        
 def main():
     print("Starting Aquarium Monitor ...")
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    reboot_btn = Button(6, hold_time=10)
-    reboot_btn.when_held = system_reboot    
     # Find the Ph object in the list of initialized sensors
     ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
     if ph_sensor:
@@ -812,7 +851,7 @@ def main():
             controller.read_sensors_and_update()
             controller.test_and_report()
             controller.update_display([
-                f"Time: {datetime.now().strftime('%H:%M')}",
+                f"Time: {controller.convert_to_local_time(datetime.now()).strftime('%H:%M')}",
                 f"Temp: {controller.display_temp:.1f} F",
                 f"PH:   {controller.display_ph:.2f}"
             ])         

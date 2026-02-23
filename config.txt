@@ -54,10 +54,15 @@ ph_calibrate_low=6.88
 smtp=smtp.gmail.com
 # Subject line in the alert email
 email_subject=Alert from Attinella aquarium
+# Cloud provider
+cloud_provider=dropbox
+# Cloud path 
+cloud_path=ReefMonitor/status
+# Time zone for status and reports (standard IANA Time Zone name)
+timezone=America/Chicago
 # Comma separated list of email recipients
 email_recipients=john.attinella@gmail.com
-# Location to store status (rclone to cloud storage) 
-cloud_store_filepath=/home/aquamon/reef_monitor/status
+
 #--------------------------------------------------------------------------------
 #  Required Environment Variables
 #--------------------------------------------------------------------------------
