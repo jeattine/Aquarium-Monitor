@@ -506,7 +506,7 @@ class GpioCtl:
         self.display_ph = 0.0
         self.display_temp = 0.0
         self.local_config_path = Path(__file__).parent / 'config.txt'
-        self.local_status_path = Path(__file__).parent / 'current.txt'
+        self.local_status_path = Path('/tmp/current.txt')
         self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
         self.dropbox_status_path = None
         self.dropbox_config_path = None
