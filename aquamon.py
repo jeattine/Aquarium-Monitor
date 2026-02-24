@@ -22,6 +22,7 @@ from email.mime.text import MIMEText
 from collections import deque
 from gpiozero import DigitalInputDevice, Button
 from luma.core.interface.serial import i2c
+from PIL import ImageFont
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 
@@ -29,7 +30,7 @@ from luma.core.render import canvas
 # MCP3008 Chip 0: Channels 0-7 (Temp, PH, etc.)
 # MCP3008 Chip 1: Channels 8+
 # OLED: I2C Address 0x3C
-# Buttons: GPIO 25 (pH Low Calibrate), GPIO 26 (pH High Calibrate)
+# Buttons: GPIO 25 (pH Low Calibrate), GPIO 27 (pH High Calibrate)
 
 class Gpio:
     def __init__(self, gpio_controller, config_file_data):
@@ -47,7 +48,7 @@ class Gpio:
     def test(self):
         current_value = self.read_value()
         if not self.test_active:
-            if current_value < 0 or self.controller.start_time + timedelta(seconds=90) > datetime.now():
+            if current_value < 0 or self.controller.start_time + timedelta(seconds=120) > datetime.now():
                 return current_value
         self.test_active = True
         if self.controller.calibrate:
@@ -202,6 +203,8 @@ class TempSensor(GpioAnalog):
         self.current_temp = 0
         self.ema_value = None
         self.alpha = 0.2  # Smoothing factor
+        self.samples = deque([500] * 16, maxlen=16)
+
         # Check if this instance is the primary water sensor
         self.is_water_sensor = "Water" in self.config_info[3].strip()  
  
@@ -209,6 +212,9 @@ class TempSensor(GpioAnalog):
         # Get trimmed mean from parent (GpioAnalog)
         super().read_sensor_and_update()
         current_trimmed_mean = self.averaged_sample
+        
+        # debugging
+        #print(f"{self.samples}\n")
 
         # Apply Exponential Moving Average (EMA) to smooth jitter
         if self.ema_value is None:
@@ -354,6 +360,9 @@ class Ph(GpioAnalog):
         # Use parent class logic to get the trimmed mean
         super().read_sensor_and_update()
         current_trimmed_mean = self.averaged_sample
+
+        # debugging
+        #print(f"{self.samples}\n")
 
         # Apply Exponential Moving Average (EMA)
         if self.ema_value is None:
@@ -553,20 +562,21 @@ class GpioCtl:
         # Digital port, GPIO, pin mapping
         self.digital_map = {
             # Monitor port Number, Raspberry PI BCM(GPIO) Number
-            '14': DigitalInputDevice(4,  pull_up=True), # Raspberry pin 7
-            '15': DigitalInputDevice(5,  pull_up=True), # Raspberry pin 29
-            '16': DigitalInputDevice(16, pull_up=True), # Raspberry pin 36
-            '17': DigitalInputDevice(17, pull_up=True), # Raspberry pin 11
-            '18': DigitalInputDevice(18, pull_up=True), # Raspberry pin 12
-            '19': DigitalInputDevice(19, pull_up=True), # Raspberry pin 35
-            '20': DigitalInputDevice(20, pull_up=True), # Raspberry pin 38
-            '21': DigitalInputDevice(21, pull_up=True), # Raspberry pin 40
-            '22': DigitalInputDevice(22, pull_up=True), # Raspberry pin 15
-            '23': DigitalInputDevice(23, pull_up=True), # Raspberry pin 16
-            '24': DigitalInputDevice(24, pull_up=True)  # Raspberry pin 18
+            '14': DigitalInputDevice(4,  pull_up=True, bounce_time=0.05), # Raspberry pin 7
+            '15': DigitalInputDevice(5,  pull_up=True, bounce_time=0.05), # Raspberry pin 29
+            '16': DigitalInputDevice(16, pull_up=True, bounce_time=0.05), # Raspberry pin 36
+            '17': DigitalInputDevice(17, pull_up=True, bounce_time=0.05), # Raspberry pin 11
+            '18': DigitalInputDevice(18, pull_up=True, bounce_time=0.05), # Raspberry pin 12
+            '19': DigitalInputDevice(19, pull_up=True, bounce_time=0.05), # Raspberry pin 35
+            '20': DigitalInputDevice(20, pull_up=True, bounce_time=0.05), # Raspberry pin 38
+            '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
+            '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
+            '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05), # Raspberry pin 16
+            '24': DigitalInputDevice(24, pull_up=True, bounce_time=0.05)  # Raspberry pin 18
             
             # GPIOs 25 (pin 22) and 27 (pin 13) are used for the calibration buttons
-            # GPIO 6 (pin 31) used for system restart        
+            # GPIO 6 (pin 31) used for system restart
+            # GPIO 13 is used for the system LED
             
         }
         
@@ -599,8 +609,13 @@ class GpioCtl:
             self.spi2.max_speed_hz = 500000   
         except Exception as e:
             sys.exit(f"Critical Error: Could not initialize SPI bus. {e}")
-            
-        # Initialize OLED
+
+        # FreeSans font path
+        font_path = "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+        self.font_small = ImageFont.truetype(font_path, 12)
+        self.font_large = ImageFont.truetype(font_path, 26)
+        self.font_medium = ImageFont.truetype(font_path, 16)
+        
         try:
             serial = i2c(port=1, address=0x3C)
             self.display = ssd1306(serial)
@@ -723,17 +738,18 @@ class GpioCtl:
         # reply[2] is the remaining 8 bits
         return ((reply[1] & 3) << 8) + reply[2]
         
-    def read_digital(self, gpio_num):
-        label = str(gpio_num).strip()
+    def read_digital(self, port_num):
+        label = str(port_num).strip()
         if label in self.digital_map:
-            return 1 if self.digital_map[label].is_active else 0
-        return 0
+            return 0 if self.digital_map[label].is_active else 1
+        return 1
 
-    def update_display(self, lines):
+    def update_display(self, header, lines):
         if self.display:
             with canvas(self.display) as draw:
+                draw.text((0, 0), header, font=self.font_medium, fill="white")
                 for idx, line in enumerate(lines):
-                    draw.text((0, idx*14), line, fill="white")
+                    draw.text((0, 16+idx*22), line, font=self.font_large, fill="white")
 
     def read_sensors_and_update(self):
         for x in self.my_gpios:
@@ -850,9 +866,9 @@ def main():
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            controller.update_display([
-                f"Time: {controller.convert_to_local_time(datetime.now()).strftime('%H:%M')}",
-                f"Temp: {controller.display_temp:.1f} F",
+            controller.update_display(
+            f"Time: {controller.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}",
+                [f"Temp: {controller.display_temp:.1f} F",
                 f"PH:   {controller.display_ph:.2f}"
             ])         
             time.sleep(controller.sample_time)
