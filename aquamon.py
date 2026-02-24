@@ -6,19 +6,31 @@ import sys
 import os
 import shutil
 import time
-import telnetlib
 import math
 import smtplib
 import statistics
 import logging
 import socket
 import subprocess
+import spidev
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
+from zoneinfo import ZoneInfo, available_timezones
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from collections import deque
+from gpiozero import DigitalInputDevice, Button
+from luma.core.interface.serial import i2c
+from PIL import ImageFont
+from luma.oled.device import ssd1306
+from luma.core.render import canvas
+
+# --- HARDWARE MAPPING ---
+# MCP3008 Chip 0: Channels 0-7 (Temp, PH, etc.)
+# MCP3008 Chip 1: Channels 8+
+# OLED: I2C Address 0x3C
+# Buttons: GPIO 25 (pH Low Calibrate), GPIO 27 (pH High Calibrate)
 
 class Gpio:
     def __init__(self, gpio_controller, config_file_data):
@@ -36,7 +48,7 @@ class Gpio:
     def test(self):
         current_value = self.read_value()
         if not self.test_active:
-            if current_value < 0 or self.controller.start_time + timedelta(seconds=90) > datetime.now():
+            if current_value < 0 or self.controller.start_time + timedelta(seconds=120) > datetime.now():
                 return current_value
         self.test_active = True
         if self.controller.calibrate:
@@ -73,7 +85,7 @@ class Gpio:
         return current_value
 
     def in_time_range(self, time_start, time_end):
-        now = datetime.now().time()
+        now = self.controller.convert_to_local_time(datetime.now()).time()
         start = datetime.strptime(time_start, "%H:%M").time()
         end = datetime.strptime(time_end, "%H:%M").time()
     
@@ -115,7 +127,7 @@ class GpioAnalog(Gpio):
         # Create a running averaged sample dumping the 1/8th highest and 1/8th lowest samples
         if self.enable_averaging:
             temp_samples = sorted(list(self.samples))
-            # Trim 25% lowest and 25% highest
+            # Trim 12.5% lowest and 12.5% highest
             trim_low = int(len(temp_samples)/8)
             trim_high = int(len(temp_samples)) - trim_low
             temp_samples = temp_samples[trim_low:trim_high]
@@ -188,48 +200,61 @@ class CO2deliverySensor(GpioDigital):
 class TempSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
         super(TempSensor, self).__init__(gpio_controller, config_file_data)
+        self.current_temp = 0
         self.ema_value = None
-        self.alpha = 0.2  # Smaller = smoother but slower to react
+        self.alpha = 0.2  # Smoothing factor
+        self.samples = deque([500] * 16, maxlen=16)
 
+        # Check if this instance is the primary water sensor
+        self.is_water_sensor = "Water" in self.config_info[3].strip()  
+ 
     def read_sensor_and_update(self):
-        # Use parent logic to get the trimmed mean
+        # Get trimmed mean from parent (GpioAnalog)
         super().read_sensor_and_update()
         current_trimmed_mean = self.averaged_sample
+        
+        # debugging
+        #print(f"{self.samples}\n")
 
-        # Apply Exponential Moving Average (EMA)
+        # Apply Exponential Moving Average (EMA) to smooth jitter
         if self.ema_value is None:
             self.ema_value = current_trimmed_mean
         else:
             self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
         
-        # Overwrite the result used for Temperature calculation
-        self.averaged_sample = self.ema_value
+        # Calculate Resistance
+        pad_resistor = float(self.config_info[5].strip())
+        if self.ema_value <= 0:
+            self.current_temp = 0
+            return
+
+        # Vout = Vin * (R_pad / (R_therm + R_pad)) -> Solving for R_therm:
+        resistance = ((1024 * pad_resistor / self.ema_value) - pad_resistor)
+        
+        # Steinhart-Hart Equation
+        try:
+            ln_r = math.log(resistance)
+            A, B, C = 1.129148e-3, 2.34125e-4, 8.76741e-8
+            temp_k = 1 / (A + B * ln_r + C * math.pow(ln_r, 3))
+            
+            # Convert Kelvin to Celsius
+            temp_c = temp_k - 273.15
+            # Convert to Fahrenheit
+            temp_f = (temp_c * 9.0) / 5.0 + 32.0
+            
+            # 5. Adjust with calibration offset from config
+            calibration = float(self.config_info[6].lstrip())
+            self.current_temp = temp_f + calibration
+
+            # 6. Update Controller's global display variable
+            if self.is_water_sensor:
+                self.controller.display_temp = self.current_temp
+                
+        except (ValueError, ZeroDivisionError):
+            self.current_temp = 0
 
     def read_value(self):
-        pad_resistor = float(self.config_info[5].lstrip())
-        #[Ground] -- [10k-pad-resistor] -- | -- [thermistor] --[Vcc (5v)]
-        if self.averaged_sample == 0:
-            return 0
-        if self.averaged_sample < 0:
-            return 0
-        resistance = ((1024 * pad_resistor / self.averaged_sample) - pad_resistor)
-
-        #**************************************************************
-        # Utilizes the Steinhart-Hart Thermistor Equation:
-        #    Temperature in Kelvin = 1 / {A + B[ln(R)] + C[ln(R)]^3}
-        #    where A = 0.001129148, B = 0.000234125 and C = 8.76741E-08
-        #**************************************************************
-        ln_r = math.log(resistance)
-        A, B, C = 1.129148e-3, 2.34125e-4, 8.76741e-8
-        temp = 1 / (A + B * ln_r + C * math.pow(ln_r, 3))
-        #Convert from Kelvin the Celsius
-        temp = temp - 273.15
-        # Convert to Fahrenheit.
-        temp = (temp * 9.0) / 5.0 + 32.0
-        # Adjust with calibration value
-        calibration = float(self.config_info[6].lstrip())
-
-        return temp + calibration
+        return self.current_temp
 
 class RandomFlowSensor(GpioAnalog):
     def __init__(self, gpio_controller, config_file_data):
@@ -276,6 +301,8 @@ class Battery(GpioAnalog):
         super(Battery, self).__init__(gpio_controller, config_file_data)
         # initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
+        self.config_info5_float = float(self.config_info[5].strip())
+        self.config_info7_float = float(self.config_info[7].strip())
 
     def read_value(self):
         # ---------------------------------------------------------------------------
@@ -290,9 +317,9 @@ class Battery(GpioAnalog):
         return voltage
         
     def read_value_text(self, value):
-        if value > float(self.config_info[5].strip()):
+        if value > self.config_info5_float:
             return f' {self.config_info[6].strip()} ({value:2.1f})'
-        elif value > float(self.config_info[7].strip()):
+        elif value > self.config_info7_float:
             return f' {self.config_info[8].strip()} ({value:2.1f})'
         return f' {self.config_info[9].strip()} ({value:2.1f})'
             
@@ -302,28 +329,40 @@ class Ph(GpioAnalog):
         # This class tracks the max and min values/timestamps and logs PH values every hour
         self.slope = float(self.config_info[5].lstrip())
         self.offset = float(self.config_info[6].lstrip())
-        self.samples = deque([(8.1 - self.offset) * self.slope] * 16, maxlen=16)       
+        self.samples = deque([(8.1 * self.slope + self.offset)] * 16, maxlen=16)
+        self.current_ph = 8.0
         self.ema_value = None
-        self.alpha = 0.1  # Smaller = smoother but slower to react
+        self.alpha = 0.2  # 20% of new average mixed with 80% previous
+        self.raw_low = None
+        self.raw_high = None
+
         self.min_max_init()
         self.log_stamp = datetime.now().hour   
-        log_path = self.controller.base_path / 'phlog.txt'
+        log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
         
+        def log_converter(*args):
+            return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.controller.timezone)).timetuple()            
+  
         # Avoid adding multiple log handlers if the class is re-instantiated
         if not self.ph_logger.handlers:
-            # Keep 5 backup files, each max 1MB
-            handler = RotatingFileHandler(log_path, maxBytes=10**6, backupCount=5)
+            # Keep 5 backup files, each max 10K
+            handler = RotatingFileHandler(log_path, maxBytes=10**4, backupCount=5)
             # Standard CSV-like format: Time,Value
             formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-            handler.setFormatter(formatter)
-            self.ph_logger.addHandler(handler)    
-
+            handler.setFormatter(formatter)    
+            
+            handler.formatter.converter = log_converter
+            self.ph_logger.addHandler(handler) 
+        
     def read_sensor_and_update(self):
         # Use parent class logic to get the trimmed mean
         super().read_sensor_and_update()
         current_trimmed_mean = self.averaged_sample
+
+        # debugging
+        #print(f"{self.samples}\n")
 
         # Apply Exponential Moving Average (EMA)
         if self.ema_value is None:
@@ -332,25 +371,27 @@ class Ph(GpioAnalog):
             self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)      
         # Overwrite the result used for PH calculation
         self.averaged_sample = self.ema_value
-
-    def read_value(self):
+        
         current_day = datetime.now().day
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
             self.min_max_init()
-        #print(self.samples)
-        if self.controller.calibrate:
-            print(f'PH raw digitial: {self.averaged_sample}')
-            return self.averaged_sample
-        ph = self.averaged_sample / self.slope + self.offset
+        
+        self.current_ph = (self.averaged_sample - self.offset) / self.slope
+        
+        # Record PH in controller for Display Panel
+        self.controller.display_ph = self.current_ph
+        
         if self.test_active:         
-            if ph > self.max_ph:
-                self.max_ph = ph
+            if self.current_ph > self.max_ph:
+                self.max_ph = self.current_ph
                 self.max_timestamp = datetime.now()
-            if ph < self.min_ph:
-                self.min_ph = ph
+            if self.current_ph < self.min_ph:
+                self.min_ph = self.current_ph
                 self.min_timestamp = datetime.now()
-        return ph
+
+    def read_value(self):
+        return self.current_ph
 
     def min_max_init(self):
         self.max_ph = 4
@@ -363,15 +404,94 @@ class Ph(GpioAnalog):
         current_hour = datetime.now().hour
         if current_hour != self.log_stamp:
             # Logging library handles the timestamp and file writing
-            self.ph_logger.info(f"{value:2.1f}")
+            self.ph_logger.info(f" {value:2.1f}")
             self.log_stamp = current_hour
+            local_file = self.controller.local_phlog_path
+            remote_file = self.controller.dropbox_phlog_path
+            # Write the log file out to the cloud            
+            self.controller.sync_to_cloud(local_file, remote_file)
             
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
-        min_ts = self.min_timestamp.strftime("%I:%M %p")
-        max_ts = self.max_timestamp.strftime("%I:%M %p")
+        min_ts = self.controller.convert_to_local_time(self.min_timestamp).strftime("%I:%M %p")
+        max_ts = self.controller.convert_to_local_time(self.max_timestamp).strftime("%I:%M %p")
         return f'{value:2.1f}  max:{self.max_ph:3.1f} at {max_ts}  min:{self.min_ph:3.1f} at {min_ts}'
 
+    def calibrate(self, target):
+        # Capture the current raw value from the running average
+        raw = self.averaged_sample
+        if target == self.controller.ph_calibrate_low:
+            self.raw_low = raw
+        else:
+            self.raw_high = raw
+        
+        if self.raw_low and self.raw_high:
+            self.slope = (self.raw_high - self.raw_low) /  (self.controller.ph_calibrate_high - self.controller.ph_calibrate_low)
+            self.offset = self.controller.ph_calibrate_low - (self.raw_low / self.slope)
+            self.save_to_config()
+            # Reset the stored calibration data to allow future re-calibration
+            self.raw_low = 0
+            self.raw_high = 0
+
+    def save_to_config(self):
+        filename = self.controller.local_config_path
+        remote_filename = self.controller.dropbox_config_path
+        temp_filename = filename.with_suffix('.tmp')
+        backup_filename = filename.with_suffix('.bak')
+        updated_lines = []
+        
+        try:
+            with open(filename, 'r') as f:
+                lines = f.readlines()
+            
+            for line in lines:
+                # Identify the pH line (starts with 'ph')
+                if line.strip().startswith('ph,'):
+                    parts = line.split(',')
+                    # parts[0]=class, [1]=gpio, [2]=nag, [3]=label, [4]=condition
+                    # parts[5]=slope, [6]=offset
+                    
+                    # We preserve the first 5 fields exactly as they are
+                    parts[5] = f" {self.slope:.4f}"
+                    # Append newline to the last part
+                    parts[6] = f" {self.offset:.4f}\n"
+                    
+                    new_line = ",".join(parts)
+                    updated_lines.append(new_line)
+                    print(f"Updated config line: {new_line.strip()}")
+                else:
+                    updated_lines.append(line)
+            
+            # Create a backup of the current good config
+            shutil.copy2(filename, backup_filename)            
+            
+            # Write to temporary file first
+            with open(temp_filename, 'w') as f:
+                f.writelines(updated_lines)
+                f.flush()
+                os.fsync(f.fileno()) # Force write to physical disk
+            
+            # Atomic rename
+            os.replace(temp_filename, filename)
+            print("Successfully saved new calibration to config.txt")
+        
+        except Exception as e:
+            print(f"Error saving calibration: {e}")
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+        
+        # Push the updated config to cloud
+        self.controller.sync_to_cloud(filename, remote_filename)
+        
+class CalibrationButtons:
+    def __init__(self, ph, controller):
+        self.ph = ph
+        self.controller = controller
+        self.btn_low = Button(25, hold_time=3)
+        self.btn_high = Button(27, hold_time=3)
+        
+        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low)
+        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high)
 
 class GpioCtl:
     def __init__(self):
@@ -382,14 +502,20 @@ class GpioCtl:
         self.settings_unexpected = []
         self.settings_missing = []
         self.start_time = datetime.now()
-        self.start_time_str = self.start_time.strftime("%A %B %d %I:%M:%S %p")      
+        self.start_time_str = None 
+        self.display_ph = 0.0
+        self.display_temp = 0.0
+        self.local_config_path = Path(__file__).parent / 'config.txt'
+        self.local_status_path = Path('/tmp/current.txt')
+        self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
+        self.dropbox_status_path = None
+        self.dropbox_config_path = None
+        self.dropbox_phlog_path = None
         
         # List of required environment variables
         required_vars = {
-            'gpio_pw': 'AQUAMON_GPIO_PW',
             'me': 'AQUAMON_EMAIL',
-            'email_pw': 'AQUAMON_EMAIL_PW',
-            'recipients': 'AQUAMON_RECIPIENTS'
+            'email_pw': 'AQUAMON_EMAIL_PW'
         }
         # Mapping config keys to Class names
         self.SENSOR_MAP = {
@@ -407,21 +533,57 @@ class GpioCtl:
         }
         # Global integer settings
         self.global_integers = [
-            'connect_timeout',
-            'reconnect_delay',
-            'reconnect_attempts',
             'server_update_freq',
             'sample_time'
-        ]  
+        ]    
+        
+        # Global float settings
+        self.global_floats = [
+            'ph_calibrate_low',
+            'ph_calibrate_high'            
+        ]
+        
         # All required global settings
-        self.global_settings = self.global_integers + [
-            'username',
-            'tcp_addr',
+        self.global_settings = self.global_integers + self.global_floats + [
             'smtp',
             'email_subject',
-            'cloud_store',
-            'local_filepath'
+            'cloud_path',
+            'cloud_provider',
+            'timezone',
+            'email_recipients'
         ]           
+
+        # Supported cloud providers
+        self.cloud_providers = [
+            'dropbox',
+            'onedrive'
+        ]
+
+        # Digital port, GPIO, pin mapping
+        self.digital_map = {
+            # Monitor port Number, Raspberry PI BCM(GPIO) Number
+            '14': DigitalInputDevice(4,  pull_up=True, bounce_time=0.05), # Raspberry pin 7
+            '15': DigitalInputDevice(5,  pull_up=True, bounce_time=0.05), # Raspberry pin 29
+            '16': DigitalInputDevice(16, pull_up=True, bounce_time=0.05), # Raspberry pin 36
+            '17': DigitalInputDevice(17, pull_up=True, bounce_time=0.05), # Raspberry pin 11
+            '18': DigitalInputDevice(18, pull_up=True, bounce_time=0.05), # Raspberry pin 12
+            '19': DigitalInputDevice(19, pull_up=True, bounce_time=0.05), # Raspberry pin 35
+            '20': DigitalInputDevice(20, pull_up=True, bounce_time=0.05), # Raspberry pin 38
+            '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
+            '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
+            '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05), # Raspberry pin 16
+            '24': DigitalInputDevice(24, pull_up=True, bounce_time=0.05)  # Raspberry pin 18
+            
+            # GPIOs 25 (pin 22) and 27 (pin 13) are used for the calibration buttons
+            # GPIO 6 (pin 31) used for system restart
+            # GPIO 13 is used for the system LED
+            
+        }
+        
+        # Analog mapping is a sequential map of port numbers to channels
+        #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
+        #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
+        #    MCP3008 chip 2 channels 5-7 are currently not configured
 
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
@@ -429,53 +591,98 @@ class GpioCtl:
             if value is None:
                 sys.exit(f"Critical Error: {env_var} is not set.")
             setattr(self, attr, value)        
-
-        print(f"Alerts will be sent to the following recipients: {self.recipients}")
-        
+      
         # Are we requested to run in calibration mode?
         self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
-        self.load_config('config.txt')
+        self.load_config(self.local_config_path)
+        
+        print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
 
+        # Initialize SPI Hardware
+        try:
+            self.spi1 = spidev.SpiDev()
+            self.spi1.open(0, 0) # Chip 1 (CE0)
+            self.spi1.max_speed_hz = 500000
+
+            self.spi2 = spidev.SpiDev()
+            self.spi2.open(0, 1) # Chip 2 (CE1)
+            self.spi2.max_speed_hz = 500000   
+        except Exception as e:
+            sys.exit(f"Critical Error: Could not initialize SPI bus. {e}")
+
+        # FreeSans font path
+        font_path = "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
+        self.font_small = ImageFont.truetype(font_path, 12)
+        self.font_large = ImageFont.truetype(font_path, 26)
+        self.font_medium = ImageFont.truetype(font_path, 16)
+        
+        try:
+            serial = i2c(port=1, address=0x3C)
+            self.display = ssd1306(serial)
+        except:
+            self.display = None
+            print("OLED not found, continuing without display.")
         
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
-        
-        # Connect to the GPIO monitor
-        self.connect()
 
+    def __del__(self):
+        """Clean up hardware resources on exit"""
+        try:
+            if hasattr(self, 'spi0'):
+                self.spi1.close()
+            if hasattr(self, 'spi1'):
+                self.spi2.close()
+            print("SPI buses closed successfully.")
+        except Exception as e:
+            print(f"Error during hardware cleanup: {e}")
+       
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
                 # Handle global configuration settings
-                line = line.strip()
-                if not line or line[0] == '#' or '=' in line:
+                clean_line = line.strip()
+                if not clean_line or clean_line.startswith('#'):
+                    continue
+                if '=' in clean_line:
                     # Handle global settings (username, password, etc.)
-                    if '=' in line:
-                        self.parse_setting(line)
-            # Define the base directory using pathlib
-            self.base_path = Path(self.local_filepath) / self.cloud_store
-        
-            # Ensure the directory exists (create it if it doesn't)
-            self.base_path.mkdir(parents=True, exist_ok=True)  
-
-            # Move through the file again, this time collecting sensor configuration
-            gpio_config.seek(0)
-            
-            for line in gpio_config: 
-                # Handle sensor instantiations
-                parts = line.split(',')
-                prefix = parts[0].lower()
+                    self.parse_setting(clean_line)
+                elif ',' in clean_line:
+                    # Handle sensor instantiations
+                    parts = [p.strip() for p in clean_line.split(',')]
+                    prefix = parts[0].lower()
                 
-                # Check if the prefix matches one of our known sensor types
-                for key, sensor_class in self.SENSOR_MAP.items():
-                    if prefix.startswith(key):
-                        self.my_gpios.append(sensor_class(self, parts))
-                        break
+                    # Check if the prefix matches one of our known sensor types
+                    for key, sensor_class in self.SENSOR_MAP.items():
+                        if prefix.startswith(key):
+                            self.my_gpios.append(sensor_class(self, parts))
+                            break
+                                
             if self.settings_unexpected:
                 print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")            
             self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
             if self.settings_missing:
                 sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
+
+            # See if a valid timezone was specified. Expecting a valid IANA name
+            valid_zones = available_timezones()
+            if self.timezone not in valid_zones:
+                print(f"Warning: unknown timezone was specified: {self.timezone}. Defaulting to UTC")
+                self.timezone = 'UTC'
+
+            # Test for supported cloud providers
+            self.cloud_provider = self.cloud_provider.lower()
+            if self.cloud_provider not in self.cloud_providers:
+                print(f"Warning: unsupported cloud provider: {self.cloud_provider}.") 
+
+            # Define destination file paths (can't use Path object for cloud destinations)
+            drop_box_path_sanitized = self.cloud_path.strip('/')
+            self.dropbox_status_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/current.txt"
+            self.dropbox_config_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/config.txt"
+            self.dropbox_phlog_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/phlog.txt"
+
+            # Initialize the start time string now that we have the timezone info
+            self.start_time_str = self.get_local_timestamp()     
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
@@ -486,6 +693,12 @@ class GpioCtl:
             except Exception as error:
                 sys.exit(f'Specified value for {key.strip()} must be an integer!')
             setattr(self, key.strip(), value_int)
+        elif key.strip() in self.global_floats:
+            try:
+                value_float = float(value.strip())
+            except Exception as error:
+                sys.exit(f'Specified value for {key.strip()} must be a floating point number!')
+            setattr(self, key.strip(), value_float)
         else:
             setattr(self, key.strip(), value.strip())
         if key.strip() in self.global_settings:
@@ -493,63 +706,50 @@ class GpioCtl:
         else:
             self.settings_unexpected.append(key.strip())
 
-    def authenticate(self):
-        self.tn.read_until('User Name: '.encode(),self.connect_timeout)
-        self.tn.write((self.username + '\n').encode())
-        self.tn.read_until('Password: '.encode(), self.connect_timeout)
-        self.tn.write((self.gpio_pw  + '\n').encode())
-        print((self.tn.read_until('>>'.encode())).decode())
-        self.connected = True
+    def convert_to_local_time(self, utc_time):
+        local_tz = ZoneInfo(self.timezone)
+        local_time = utc_time.astimezone(local_tz)
+        return local_time
 
-    def connect(self):
-        self.tn = telnetlib.Telnet(self.tcp_addr)
-        self.authenticate()
-
-    def attempt_reconnect(self):
-        attempt = 1
-        while attempt < self.reconnect_attempts:
-            dt_string = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
-            print(f"{dt_string} Attempt reconnect in {self.reconnect_delay} seconds...")
-            time.sleep(self.reconnect_delay)
-            try:
-                self.tn.open(self.tcp_addr)
-                self.authenticate()
-                break
-            except Exception as error:
-                print(f"Attempt number {attempt} failed")
-                attempt += 1
-                self.tn.close()
-                self.connected = False
-                if attempt == self.reconnect_attempts:
-                    print(f"Could not reconnect after {attempt} attempts Terminating.")
-                    raise
-        print(f"Successfully reconnected after {attempt} attempts :)")
-
-    def disconnect(self):
-        try:
-            self.tn.write('exit\n'.encode())
-        except Exception as error:
-            print(f"Ignored Exception={error} attempting to disconnect")
-
-    def read_gpio(self, read_type, gpio_num):
-        while True:
-            try:
-                self.tn.write((read_type + f' {gpio_num} \n').encode())
-                result = self.tn.read_until('>'.encode(), self.connect_timeout).decode()
-                rtn_int = int(result.split()[0])
-                break
-            except Exception as error:
-                print(f"Lost connection. Exception={error} reading GPIO!")
-                self.tn.close()
-                self.connected = False
-                self.attempt_reconnect()              
-        return rtn_int
+    def get_local_timestamp(self):
+        """Returns a timestamp string in the configured timezone"""
+        utc_now = datetime.now(ZoneInfo("UTC"))
+        local_now = self.convert_to_local_time(utc_now)
+        return local_now.strftime("%A %B %d %I:%M:%S %p")
 
     def read_analog(self, gpio_num):
-        return self.read_gpio('adc read', gpio_num)
+        # Reads raw 0-1023 value from MCP3008 using spidev
+        port = int(gpio_num)
+    
+        # Determine which chip and which channel (0-7)
+        if port <= 8:
+            bus = self.spi1
+            channel = port - 1
+        else:
+            bus = self.spi2
+            channel = port - 9  # Ports 9-16 map to channels 0-7 on chip 2
 
-    def read_digital(self, gpio_num):
-        return self.read_gpio('gpio read', gpio_num)
+        # Perform SPI transaction
+        # [1, (8+channel) << 4, 0] is the standard MCP3008 request pattern
+        reply = bus.xfer2([1, (8 + channel) << 4, 0])
+        
+        # Construct the 10-bit integer from the 3-byte response
+        # (reply[1] & 3) extracts the two 'null/high' bits
+        # reply[2] is the remaining 8 bits
+        return ((reply[1] & 3) << 8) + reply[2]
+        
+    def read_digital(self, port_num):
+        label = str(port_num).strip()
+        if label in self.digital_map:
+            return 0 if self.digital_map[label].is_active else 1
+        return 1
+
+    def update_display(self, header, lines):
+        if self.display:
+            with canvas(self.display) as draw:
+                draw.text((0, 0), header, font=self.font_medium, fill="white")
+                for idx, line in enumerate(lines):
+                    draw.text((0, 16+idx*22), line, font=self.font_large, fill="white")
 
     def read_sensors_and_update(self):
         for x in self.my_gpios:
@@ -559,13 +759,13 @@ class GpioCtl:
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
         outer['From'] = self.me
-        outer['To'] = self.recipients
+        outer['To'] = self.email_recipients
         # Add the alert message
         msg = MIMEText("\n".join(self.email_text))
         outer.attach(msg)
 
         # Path to current status
-        status_file = self.base_path / 'current.txt'
+        status_file = self.local_status_path
 
         # Attach the current status information
         try:
@@ -576,7 +776,7 @@ class GpioCtl:
             print("Warning: current.txt not found for email attachment.")
 
         # Add a link to check the current status
-        email_link = MIMEText(self.cloud_store + 'current.txt\n')
+        email_link = MIMEText(f"{self.dropbox_status_path}\n")
         outer.attach(email_link)
       
         # Send the email
@@ -585,37 +785,51 @@ class GpioCtl:
                 server.ehlo()
                 server.starttls()
                 server.login(self.me, self.email_pw)
-                server.sendmail(self.me, self.recipients.split(','), outer.as_string())
+                server.sendmail(self.me, self.email_recipients.split(','), outer.as_string())
         except Exception as error:
             print(f"Exception={error} Error sending alert!: {msg}")
         # Initialize for next alert
         self.email_text[:] = []
 
     def test_and_report(self):
-        # store the status file to the cloud drive based on the update frequency
-        self.report_calls += 1
         
+        self.report_calls += 1
+        for gpio in self.my_gpios:
+            gpio_current_values = [gpio.test() for gpio in self.my_gpios]
+            
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
-            curDateTimeRaw = datetime.now()
-            curDateTime = curDateTimeRaw.strftime("%A %B %d %I:%M:%S %p")
-            status_file_path = self.base_path / 'current.txt'
+            cur_date_time = self.get_local_timestamp()
+            status_file_path = self.local_status_path
             with status_file_path.open('w') as status_file:
-                status_file.write(f'Sample time: {curDateTime}\n')
+                status_file.write(f'Sample time: {cur_date_time}\n')
                 status_file.write(f'Monitor start time: {self.start_time_str}\n')
-                for gpio in self.my_gpios:
-                    current_value = gpio.test()
-                    status_file.write(f'{gpio.read_label()}:{gpio.read_value_text(current_value)}\n')
+                
+                for gpio, current_val in zip(self.my_gpios, gpio_current_values):
+                    status_file.write(f'{gpio.read_label()}:{gpio.read_value_text(current_val)}\n')
                     try:
-                        gpio.log(current_value)
+                        gpio.log(current_val)
                     except Exception as logerr:
                         print(f"Exception={logerr} Error making log entry for {gpio.read_label()}!")
-        if self.email_text:
-            alerts = ", ".join(self.email_text)
-            clean_alerts = alerts.replace("\n", "")
-            print(f"{curDateTime}: {clean_alerts}")
-            self.send_email_alert()
-
+            if self.email_text:
+                alerts = ", ".join(self.email_text)
+                clean_alerts = alerts.replace("\n", "")
+                print(f"{cur_date_time}: {clean_alerts}")
+                self.send_email_alert() 
+            
+            self.sync_to_cloud(self.local_status_path, self.dropbox_status_path)
+            
+    def sync_to_cloud(self, local_file, remote_dest):
+        """Uploads status to Dropbox using the rclone API"""
+        
+        try:
+            # We use --quiet to keep the logs clean during normal operation
+            subprocess.run(['rclone', 'copyto', local_file, remote_dest, '--quiet'], check=True)
+            # print("Cloud sync successful.") # Uncomment for debugging
+        except subprocess.CalledProcessError as e:
+            # Internet likely down if we reach here.
+            print(f"Cloud Sync to {remote_dest} Failed : {e}")            
+ 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
         try:
@@ -637,16 +851,26 @@ def ensure_single_instance(port=65432):
     except socket.error:
         print("--- ERROR: Aquarium Monitor is already running! ---")
         sys.exit(1)
-        
+
 def main():
     print("Starting Aquarium Monitor ...")
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
+    # Find the Ph object in the list of initialized sensors
+    ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
+    if ph_sensor:
+        cal_btns = CalibrationButtons(ph_sensor, controller)
+    
     while True:
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
+            controller.update_display(
+            f"Time: {controller.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}",
+                [f"Temp: {controller.display_temp:.1f} F",
+                f"PH:   {controller.display_ph:.2f}"
+            ])         
             time.sleep(controller.sample_time)
         except KeyboardInterrupt:
             print("User requested termination. Exiting.")
@@ -654,8 +878,6 @@ def main():
         except Exception as error:
             print(f"Exception={error} Unhandled! Exiting")
             raise
-    controller.disconnect()
-
 
 if __name__ == '__main__':
     main()
