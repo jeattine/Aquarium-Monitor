@@ -27,7 +27,6 @@ floor,  19,  1,  Floor,                1,                Wet, Dry
 #gpiod, 21,  8,  (unused digital),     NA,               NA
 #gpiod, 22,  1,  (unused digital),     NA,               NA
 #gpiod, 23,  1,  (unused digital),     NA,               NA 
-#gpiod, 24,  1,  (unused digital),     NA,               NA         
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:
@@ -35,7 +34,8 @@ floor,  19,  1,  Floor,                1,                Wet, Dry
 #           Ports 3,4 do not have pull-up resistors. Used for PH and voltage sensing
 #           All other ports are wired with a 10K pull-up resistor
 #        2. Ports 1-13 are analog interfaces and only support analog class objects
-#        3. Ports 14-24 are digital interfaces and only support digital class objects
+#        3. Ports 14-23 are digital input interfaces and support digital class objects
+#        4. Port 24 is an output port for an LED (internal 220 ohm resistor)
 #        4. 'Nag' is the number of hours before sending another alert for 
 #           a specific condition violation that has not cleared.
 #      

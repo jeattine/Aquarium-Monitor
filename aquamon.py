@@ -20,7 +20,7 @@ from zoneinfo import ZoneInfo, available_timezones
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from collections import deque
-from gpiozero import DigitalInputDevice, Button
+from gpiozero import DigitalInputDevice, Button, LED
 from luma.core.interface.serial import i2c
 from PIL import ImageFont
 from luma.oled.device import ssd1306
@@ -74,6 +74,8 @@ class Gpio:
             # Are we in the indicated time range?
             if not time_start or self.in_time_range(time_start, time_end):
                 if current_value < float(value_low) or current_value > float(value_high):
+                    # Set flag that an alarm is active during this round of sampling
+                    self.controller.alarm_active = True
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
                     if (self.last_sent_alert + timedelta(hours=self.nag_level)) < datetime.now():
@@ -81,7 +83,7 @@ class Gpio:
                         self.last_sent_alert = datetime.now()
                         # force a server update prior to sending the alarm
                         self.controller.report_calls = self.controller.server_update_freq / self.controller.sample_time
-
+                    
         return current_value
 
     def in_time_range(self, time_start, time_end):
@@ -505,6 +507,8 @@ class GpioCtl:
         self.start_time_str = None 
         self.display_ph = 0.0
         self.display_temp = 0.0
+        self.alarm_active = False
+        self.alarm_led_active = False
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
@@ -572,13 +576,14 @@ class GpioCtl:
             '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
             '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
             '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05), # Raspberry pin 16
-            '24': DigitalInputDevice(24, pull_up=True, bounce_time=0.05)  # Raspberry pin 18
+            '24': LED(24)                                                 # Raspberry pin 18
             
             # GPIOs 25 (pin 22) and 27 (pin 13) are used for the calibration buttons
             # GPIO 6 (pin 31) used for system restart
             # GPIO 13 is used for the system LED
             
-        }
+        }        
+        self.alarm_led = self.digital_map[str(24)]
         
         # Analog mapping is a sequential map of port numbers to channels
         #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
@@ -744,6 +749,12 @@ class GpioCtl:
             return 0 if self.digital_map[label].is_active else 1
         return 1
 
+    def set_alarm_led(self):
+        self.alarm_led.blink(on_time=0.5, off_time=0.5)
+        
+    def reset_alarm_led(self):
+        self.alarm_led.off()
+
     def update_display(self, header, lines):
         if self.display:
             with canvas(self.display) as draw:
@@ -796,7 +807,15 @@ class GpioCtl:
         self.report_calls += 1
         for gpio in self.my_gpios:
             gpio_current_values = [gpio.test() for gpio in self.my_gpios]
-            
+        # If there was an alarm active after this round of sampling, set the led alarm
+        if self.alarm_active:    
+            self.set_alarm_led()
+            self.alarm_led_active = True
+            self.alarm_active = False
+        else:
+            if self.alarm_led_active:
+                self.reset_alarm_led()
+        
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
             cur_date_time = self.get_local_timestamp()
