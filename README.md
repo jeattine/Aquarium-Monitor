@@ -12,6 +12,8 @@ Code structure:
 
 ![Class structure](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/ExampleOutput.png)
 
+This is the bigger picture, showing the network interfaces and wiring to the various sensors:
+![Summary](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Summary.png)
 
 The Raspberry Pi board, Perma-Proto Hat with the two MCP3008 ICs, and the wiring to the RCA inputs:
 
