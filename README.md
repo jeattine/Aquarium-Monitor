@@ -160,7 +160,7 @@ User=aquamon
 
 Environment="AQUAMON\_EMAIL=[your\_email@gmail.com](mailto:your_email@gmail.com)"
 
-Environment="AQUAMON\_EMAIL\_PW=\_PW="your\_app\_password"
+Environment="AQUAMON\_EMAIL\_PW=\_PW=your\_app\_password"
 
 \# Path to your python interpreter and your script
 
