@@ -5,21 +5,21 @@
 temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
 temp,    2, 12,  Room Temp,            60-82,            10020, -0.4 
 ph,      3,  4,  PH,                   7.8-8.5,         -32.876, 730.45
-battery, 4, 24,  Battery Charge,       13.2-15.0,        13.2, Good, 12.9, Fair, Poor
-light,   5,  8,  Algae Scrubber Light, 21:15-09:45?200-1023+10:15-20:45?0-300
+battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
+light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
 rflow,   6,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
-hilow,   7,  1,  Aquarium Water level, 14:20-14:00?256-768, Low, High, Ok
+hilow,   7,  1,  Water level,          14:20-14:00?256-768, Low, High, Ok
 light,   8,  2,  Main Light,           09:10-20:00?500-1023+21:40-08:00?0-500
-hilow,   9,  1,  Sump Water Level,     14:20-14:00?256-768, Low, High, Ok
+hilow,   9,  1,  Sump Level,           14:20-14:00?256-768, Low, High, Ok
 #gpioa, 10,  1,  (unused analog),      NA,               NA          
 #gpioa, 11,  1,  (unused analog),      NA,               NA          
 #gpioa, 12,  1,  (unused analog),      NA,               NA          
 #gpioa, 13,  1,  (unused analog),      NA,               NA          
 #
 ###################  d  i g i t a l   s e n s o r   s e c t i o n  ################### 
-gpiod,  14,  2,  Return Pump Flow,     14:20-14:00?0,    Running, Shutdown
-gpiod,  15,  4,  Overflow box level,   1,                High, Ok
-gpiod,  16,  2,  Conditional Power,    14:20-14:00?0,    On, Off
+gpiod,  14,  2,  Return Pump,          14:20-14:00?0,    Running, Shutdown
+gpiod,  15,  4,  Overflow box,         1,                High, Ok
+gpiod,  16,  2,  Switch Power,         14:20-14:00?0,    On, Off
 gpiod,  17,  8,  Protein Skimmer,      1,                Full, Ok
 gpiod,  18,  4,  Top-off reservoir,    0,                Ok,  Low
 floor,  19,  1,  Floor,                1,                Wet, Dry

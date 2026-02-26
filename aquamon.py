@@ -76,6 +76,7 @@ class Gpio:
                 if current_value < float(value_low) or current_value > float(value_high):
                     # Set flag that an alarm is active during this round of sampling
                     self.controller.alarm_active = True
+                    self.controller.alarm_text = self.config_info[3].strip()
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
                     if (self.last_sent_alert + timedelta(hours=self.nag_level)) < datetime.now():
@@ -509,6 +510,7 @@ class GpioCtl:
         self.display_temp = 0.0
         self.alarm_active = False
         self.alarm_led_active = False
+        self.alarm_text = None
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
@@ -563,7 +565,7 @@ class GpioCtl:
             'onedrive'
         ]
 
-        # Digital port, GPIO, pin mapping
+        # Digital INPUT port, GPIO, pin mapping
         self.digital_map = {
             # Monitor port Number, Raspberry PI BCM(GPIO) Number
             '14': DigitalInputDevice(4,  pull_up=True, bounce_time=0.05), # Raspberry pin 7
@@ -575,15 +577,14 @@ class GpioCtl:
             '20': DigitalInputDevice(20, pull_up=True, bounce_time=0.05), # Raspberry pin 38
             '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
             '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
-            '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05), # Raspberry pin 16
-            '24': LED(24)                                                 # Raspberry pin 18
-            
-            # GPIOs 25 (pin 22) and 27 (pin 13) are used for the calibration buttons
-            # GPIO 6 (pin 31) used for system restart
+            '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05) # Raspberry pin 16            
+            # GPIO 24 (Raspberry pin 18) configured as output and used for an LED alarm
+            # GPIO 25 (pin 22) used for the calibration buttons
+            # GPIO 27 (pin 13) used for the calibration buttons
+            # GPIO 6  (pin 31) used for system restart
             # GPIO 13 is used for the system LED
-            
         }        
-        self.alarm_led = self.digital_map[str(24)]
+        self.alarm_led = LED(24)  # Raspberry pin 18
         
         # Analog mapping is a sequential map of port numbers to channels
         #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
@@ -755,12 +756,32 @@ class GpioCtl:
     def reset_alarm_led(self):
         self.alarm_led.off()
 
-    def update_display(self, header, lines):
+    def update_display(self, header, lines, line_fonts):
         if self.display:
             with canvas(self.display) as draw:
                 draw.text((0, 0), header, font=self.font_medium, fill="white")
                 for idx, line in enumerate(lines):
                     draw.text((0, 16+idx*22), line, font=self.font_large, fill="white")
+
+    def update_display(self):
+        if self.display:
+            with canvas(self.display) as draw:
+                line1 = f"Time: {self.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}"
+                line2 = f"Temp: {self.display_temp:.1f} F"
+                line3 = f"PH:   {self.display_ph:.2f}"
+                draw.text((0, 0), line1, font=self.font_medium, fill="white")
+                draw.text((0, 20), line2, font=self.font_large, fill="white")
+                draw.text((0, 42), line3, font=self.font_large, fill="white")
+
+    def update_alert_display(self):
+        if self.display:
+            with canvas(self.display) as draw:
+                line1 = f"Time: {self.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}"
+                line2 = "Alert Active!"
+                line3 = f"{self.alarm_text}"
+                draw.text((0, 0), line1, font=self.font_medium, fill="white")
+                draw.text((0, 20), line2, font=self.font_large, fill="white")
+                draw.text((0, 44), line3, font=self.font_medium, fill="white")
 
     def read_sensors_and_update(self):
         for x in self.my_gpios:
@@ -815,6 +836,7 @@ class GpioCtl:
         else:
             if self.alarm_led_active:
                 self.reset_alarm_led()
+                self.alarm_led_active = False
         
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
@@ -885,11 +907,10 @@ def main():
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            controller.update_display(
-            f"Time: {controller.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}",
-                [f"Temp: {controller.display_temp:.1f} F",
-                f"PH:   {controller.display_ph:.2f}"
-            ])         
+            if not controller.alarm_led_active:                
+                controller.update_display()
+            else:
+                controller.update_alert_display()               
             time.sleep(controller.sample_time)
         except KeyboardInterrupt:
             print("User requested termination. Exiting.")
