@@ -410,7 +410,7 @@ class Ph(GpioAnalog):
             self.ph_logger.info(f" {value:2.1f}")
             self.log_stamp = current_hour
             local_file = self.controller.local_phlog_path
-            remote_file = self.controller.dropbox_phlog_path
+            remote_file = self.controller.cloud_phlog_path
             # Write the log file out to the cloud            
             self.controller.sync_to_cloud(local_file, remote_file)
             
@@ -438,7 +438,7 @@ class Ph(GpioAnalog):
 
     def save_to_config(self):
         filename = self.controller.local_config_path
-        remote_filename = self.controller.dropbox_config_path
+        remote_filename = self.controller.cloud_config_path
         temp_filename = filename.with_suffix('.tmp')
         backup_filename = filename.with_suffix('.bak')
         updated_lines = []
@@ -513,10 +513,11 @@ class GpioCtl:
         self.alarm_text = None
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
+        self.local_override_path = Path('/tmp/override.txt')
         self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
-        self.dropbox_status_path = None
-        self.dropbox_config_path = None
-        self.dropbox_phlog_path = None
+        self.cloud_status_path = None
+        self.cloud_config_path = None
+        self.cloud_phlog_path = None
         
         # List of required environment variables
         required_vars = {
@@ -557,7 +558,16 @@ class GpioCtl:
             'cloud_provider',
             'timezone',
             'email_recipients'
-        ]           
+        ]
+
+        # Settings allowed to be overridden
+        self.allowed_overrides = [
+            'ph_calibrate_low',
+            'ph_calibrate_high',
+            'server_update_freq',
+            'sample_time',
+            'email_recipients'
+        ]
 
         # Supported cloud providers
         self.cloud_providers = [
@@ -651,7 +661,7 @@ class GpioCtl:
                 if not clean_line or clean_line.startswith('#'):
                     continue
                 if '=' in clean_line:
-                    # Handle global settings (username, password, etc.)
+                    # Handle global settings
                     self.parse_setting(clean_line)
                 elif ',' in clean_line:
                     # Handle sensor instantiations
@@ -664,31 +674,51 @@ class GpioCtl:
                             self.my_gpios.append(sensor_class(self, parts))
                             break
                                 
-            if self.settings_unexpected:
-                print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")            
-            self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
-            if self.settings_missing:
-                sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
+        if self.settings_unexpected:
+            print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")            
+        self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
+        if self.settings_missing:
+            sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
 
-            # See if a valid timezone was specified. Expecting a valid IANA name
-            valid_zones = available_timezones()
-            if self.timezone not in valid_zones:
-                print(f"Warning: unknown timezone was specified: {self.timezone}. Defaulting to UTC")
-                self.timezone = 'UTC'
+        # See if a valid timezone was specified. Expecting a valid IANA name
+        valid_zones = available_timezones()
+        if self.timezone not in valid_zones:
+            print(f"Warning: unknown timezone was specified: {self.timezone}. Defaulting to UTC")
+            self.timezone = 'UTC'
 
-            # Test for supported cloud providers
-            self.cloud_provider = self.cloud_provider.lower()
-            if self.cloud_provider not in self.cloud_providers:
-                print(f"Warning: unsupported cloud provider: {self.cloud_provider}.") 
+        # Test for supported cloud providers
+        self.cloud_provider = self.cloud_provider.lower()
+        if self.cloud_provider not in self.cloud_providers:
+            print(f"Warning: unsupported cloud provider: {self.cloud_provider}.") 
 
-            # Define destination file paths (can't use Path object for cloud destinations)
-            drop_box_path_sanitized = self.cloud_path.strip('/')
-            self.dropbox_status_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/current.txt"
-            self.dropbox_config_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/config.txt"
-            self.dropbox_phlog_path = f"{self.cloud_provider}:{drop_box_path_sanitized}/phlog.txt"
+        # Define external file paths (can't use Path object for cloud locations)
+        cloud_path_sanitized = self.cloud_path.strip('/')
+        self.cloud_status_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/current.txt"
+        self.cloud_config_path = f"{self.cloud_provider}:{cloud_path_sanitized}/config.txt"
+        self.cloud_phlog_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/phlog.txt"
+        self.cloud_override_path = f"{self.cloud_provider}:{cloud_path_sanitized}/override.txt"
 
-            # Initialize the start time string now that we have the timezone info
-            self.start_time_str = self.get_local_timestamp()     
+        # Initialize the start time string now that we have the timezone info
+        self.start_time_str = self.get_local_timestamp()     
+
+        # Look for an override file and apply if needed
+        try:
+            # We use --quiet to keep the logs clean during normal operation
+            subprocess.run(['rclone', 'copyto', self.cloud_override_path, self.local_override_path, '--quiet'], check=True) 
+            with open(self.local_override_path, 'r') as gpio_override:           
+                for line in gpio_override:
+                    # Handle global configuration settings
+                    clean_line = line.strip()
+                    if not clean_line or clean_line.startswith('#'):
+                        continue
+                    if '=' in clean_line:
+                        key, value = line.split('=', 1)
+                        if key.strip() in self.allowed_overrides:
+                            self.parse_setting(clean_line)
+                        else:
+                            print(f"Warning, attempt to set a restricted key ({key}) in override file.")        
+        except Exception as e:
+            print(f"Warning: No override file was processed. Expect a file (even if empty) at {self.cloud_override_path}")
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
@@ -808,7 +838,7 @@ class GpioCtl:
             print("Warning: current.txt not found for email attachment.")
 
         # Add a link to check the current status
-        email_link = MIMEText(f"{self.dropbox_status_path}\n")
+        email_link = MIMEText(f"{self.cloud_status_path}\n")
         outer.attach(email_link)
       
         # Send the email
@@ -858,10 +888,10 @@ class GpioCtl:
                 print(f"{cur_date_time}: {clean_alerts}")
                 self.send_email_alert() 
             
-            self.sync_to_cloud(self.local_status_path, self.dropbox_status_path)
+            self.sync_to_cloud(self.local_status_path, self.cloud_status_path)
             
     def sync_to_cloud(self, local_file, remote_dest):
-        """Uploads status to Dropbox using the rclone API"""
+        """Uploads status to cloud using the rclone API"""
         
         try:
             # We use --quiet to keep the logs clean during normal operation
