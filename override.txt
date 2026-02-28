@@ -1,0 +1,11 @@
+#
+# Override file for modifying the base configuration file at startup
+#
+# Any of the following settings can be modified:
+#
+#ph_calibrate_low=
+#ph_calibrate_high=
+#server_update_freq=
+#sample_time=
+#email_recipients=
+#

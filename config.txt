@@ -57,7 +57,7 @@ email_subject=Alert from Attinella aquarium
 # Cloud provider
 cloud_provider=dropbox
 # Cloud path 
-cloud_path=ReefMonitor/status
+cloud_path=ReefMonitor
 # Time zone for status and reports (standard IANA Time Zone name)
 timezone=America/Chicago
 # Comma separated list of email recipients
