@@ -702,6 +702,10 @@ class GpioCtl:
         self.start_time_str = self.get_local_timestamp()     
 
         # Look for an override file and apply if needed
+        if self.cloud_file_exists(self.cloud_override_path):
+            self.load_overrides()
+
+    def load_overrides(self):
         try:
             # We use --quiet to keep the logs clean during normal operation
             subprocess.run(['rclone', 'copyto', self.cloud_override_path, self.local_override_path, '--quiet'], check=True) 
@@ -718,7 +722,7 @@ class GpioCtl:
                         else:
                             print(f"Warning, attempt to set a restricted key ({key}) in override file.")        
         except Exception as e:
-            print(f"Warning: No override file was processed. Expect a file (even if empty) at {self.cloud_override_path}")
+            print(f"Warning: Error processing override file. Exception: {e}")
 
     def parse_setting(self, line):
         key, value = line.split('=', 1)
@@ -742,6 +746,20 @@ class GpioCtl:
         else:
             self.settings_unexpected.append(key.strip())
 
+    def cloud_file_exists(self, remote_path):
+        # 'rclone lsjson' returns a JSON list of files. 
+        # If the file doesn't exist, the list is empty.
+        try:
+            result = subprocess.run(
+                ["rclone", "lsjson", remote_path],
+                capture_output=True,
+                text=True
+            )
+        except Exception as e:
+            print(f'Error tesitng for override file. Exception: {e}')
+            result = []
+        return "override.txt" in result.stdout.strip()
+                
     def convert_to_local_time(self, utc_time):
         local_tz = ZoneInfo(self.timezone)
         local_time = utc_time.astimezone(local_tz)
@@ -785,13 +803,6 @@ class GpioCtl:
         
     def reset_alarm_led(self):
         self.alarm_led.off()
-
-    def update_display(self, header, lines, line_fonts):
-        if self.display:
-            with canvas(self.display) as draw:
-                draw.text((0, 0), header, font=self.font_medium, fill="white")
-                for idx, line in enumerate(lines):
-                    draw.text((0, 16+idx*22), line, font=self.font_large, fill="white")
 
     def update_display(self):
         if self.display:
