@@ -82,6 +82,10 @@ sudo apt install swig liblgpio-dev python3-dev build-essential -y
 
 sudo apt-get install fonts-freefont-ttf
 
+curl -fsSL https://tailscale.com/install.sh | sh
+
+sudo tailscale up
+
 **\# Create a project folder**
 
 mkdir reef\_monitor && cd reef\_monitor
