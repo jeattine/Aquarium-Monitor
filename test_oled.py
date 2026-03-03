@@ -6,12 +6,12 @@ from luma.oled.device import ssd1306
 from gpiozero import MCP3008
 import time
 
-# 1. Setup the OLED
+# Setup the OLED
 # The port=1 usually corresponds to the pins 3 & 5 we used
 serial = i2c(port=1, address=0x3C)
 device = ssd1306(serial)
 
-# 2. Setup a sample sensor (using your new speed setting)
+# Setup a sample sensor (using your new speed setting)
 test_sensor = MCP3008(channel=4, clock_pin=11, mosi_pin=10, miso_pin=9, select_pin=8)
 
 try:
