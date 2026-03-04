@@ -51,7 +51,7 @@ class Gpio:
             if current_value < 0 or self.controller.start_time + timedelta(seconds=120) > datetime.now():
                 return current_value
         self.test_active = True
-        if self.controller.calibrate:
+        if self.controller.maintenance_mode:
             return current_value
         conditions = self.config_info[4].lstrip().split('+')
         for condition in conditions:
@@ -313,9 +313,6 @@ class Battery(GpioAnalog):
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
         # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
-        if self.controller.calibrate:
-            print(f'Battery raw digital: {self.averaged_sample}')
-            return self.averaged_sample
         voltage = self.averaged_sample/68.31
         return voltage
         
@@ -430,7 +427,7 @@ class Ph(GpioAnalog):
         
         if self.raw_low and self.raw_high:
             self.slope = (self.raw_high - self.raw_low) /  (self.controller.ph_calibrate_high - self.controller.ph_calibrate_low)
-            self.offset = self.controller.ph_calibrate_low - (self.raw_low / self.slope)
+            self.offset = self.raw_low - self.controller.ph_calibrate_low * self.slope
             self.save_to_config()
             # Reset the stored calibration data to allow future re-calibration
             self.raw_low = 0
@@ -496,6 +493,13 @@ class CalibrationButtons:
         self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low)
         self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high)
 
+class MaintenanceModeButton:
+    def __init__(self, controller):
+        self.controller = controller
+        self.btn_maint = Button(23, pull_up=True, bounce_time=0.1)
+        self.btn_maint.when_pressed = lambda: self.controller.set_maintenance()
+        self.btn_maint.when_released = lambda: self.controller.reset_maintenance()
+
 class GpioCtl:
     def __init__(self):
         self.my_gpios = []
@@ -511,6 +515,7 @@ class GpioCtl:
         self.alarm_active = False
         self.alarm_led_active = False
         self.alarm_text = None
+        self.maintenance_mode = False
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
@@ -587,12 +592,13 @@ class GpioCtl:
             '20': DigitalInputDevice(20, pull_up=True, bounce_time=0.05), # Raspberry pin 38
             '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
             '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
-            '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05) # Raspberry pin 16            
+            '23': DigitalInputDevice(12, pull_up=True, bounce_time=0.05) # Raspberry pin 16            
             # GPIO 24 (Raspberry pin 18) configured as output and used for an LED alarm
             # GPIO 25 (pin 22) used for the calibration buttons
             # GPIO 27 (pin 13) used for the calibration buttons
             # GPIO 6  (pin 31) used for system restart
             # GPIO 13 is used for the system LED
+            # GPIO 12 is used to enable maintenance mode which disables alarm checking
         }        
         self.alarm_led = LED(24)  # Raspberry pin 18
         
@@ -608,8 +614,6 @@ class GpioCtl:
                 sys.exit(f"Critical Error: {env_var} is not set.")
             setattr(self, attr, value)        
       
-        # Are we requested to run in calibration mode?
-        self.calibrate = len(sys.argv) > 1 and sys.argv[1] == 'Calibrate'
         self.load_config(self.local_config_path)
         
         print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
@@ -652,7 +656,7 @@ class GpioCtl:
             print("SPI buses closed successfully.")
         except Exception as e:
             print(f"Error during hardware cleanup: {e}")
-       
+
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
@@ -805,24 +809,25 @@ class GpioCtl:
         self.alarm_led.off()
 
     def update_display(self):
-        if self.display:
-            with canvas(self.display) as draw:
+        with canvas(self.display) as draw:
+            if self.display:
                 line1 = f"Time: {self.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}"
-                line2 = f"Temp: {self.display_temp:.1f} F"
-                line3 = f"PH:   {self.display_ph:.2f}"
                 draw.text((0, 0), line1, font=self.font_medium, fill="white")
-                draw.text((0, 20), line2, font=self.font_large, fill="white")
-                draw.text((0, 42), line3, font=self.font_large, fill="white")
-
-    def update_alert_display(self):
-        if self.display:
-            with canvas(self.display) as draw:
-                line1 = f"Time: {self.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}"
-                line2 = "Alert Active!"
-                line3 = f"{self.alarm_text}"
-                draw.text((0, 0), line1, font=self.font_medium, fill="white")
-                draw.text((0, 20), line2, font=self.font_large, fill="white")
-                draw.text((0, 44), line3, font=self.font_medium, fill="white")
+                if self.alarm_led_active and not self.maintenance_mode:
+                    line2 = "Alert Active!"
+                    line3 = f"{self.alarm_text}"
+                    draw.text((0, 20), line2, font=self.font_large, fill="white")
+                    draw.text((0, 44), line3, font=self.font_medium, fill="white")
+                elif self.maintenance_mode:
+                    line2 = "Maintenance!"
+                    line3 = f"PH:   {self.display_ph:.2f}"
+                    draw.text((0, 20), line2, font=self.font_large, fill="white")
+                    draw.text((0, 42), line3, font=self.font_large, fill="white")
+                else:
+                    line2 = f"Temp: {self.display_temp:.1f} F"
+                    line3 = f"PH:   {self.display_ph:.2f}"
+                    draw.text((0, 20), line2, font=self.font_large, fill="white")
+                    draw.text((0, 42), line3, font=self.font_large, fill="white")
 
     def read_sensors_and_update(self):
         for x in self.my_gpios:
@@ -912,6 +917,15 @@ class GpioCtl:
             # Internet likely down if we reach here.
             print(f"Cloud Sync to {remote_dest} Failed : {e}")            
  
+    def set_maintenance(self):
+        self.maintenance_mode = True
+        self.set_alarm_led()
+        
+    def reset_maintenance(self):
+        self.maintenance_mode = False
+        if not self.alarm_led_active:
+            self.reset_alarm_led()
+ 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
         try:
@@ -943,15 +957,13 @@ def main():
     ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
     if ph_sensor:
         cal_btns = CalibrationButtons(ph_sensor, controller)
+    maintenance_btn = MaintenanceModeButton(controller)
     
     while True:
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            if not controller.alarm_led_active:                
-                controller.update_display()
-            else:
-                controller.update_alert_display()               
+            controller.update_display()
             time.sleep(controller.sample_time)
         except KeyboardInterrupt:
             print("User requested termination. Exiting.")
