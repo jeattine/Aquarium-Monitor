@@ -496,7 +496,7 @@ class CalibrationButtons:
 class MaintenanceModeButton:
     def __init__(self, controller):
         self.controller = controller
-        self.btn_maint = Button(23, pull_up=True, bounce_time=0.1)
+        self.btn_maint = Button(12, pull_up=True, bounce_time=0.1)
         self.btn_maint.when_pressed = lambda: self.controller.set_maintenance()
         self.btn_maint.when_released = lambda: self.controller.reset_maintenance()
 
@@ -592,7 +592,7 @@ class GpioCtl:
             '20': DigitalInputDevice(20, pull_up=True, bounce_time=0.05), # Raspberry pin 38
             '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
             '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
-            '23': DigitalInputDevice(12, pull_up=True, bounce_time=0.05) # Raspberry pin 16            
+            '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05) # Raspberry pin 16            
             # GPIO 24 (Raspberry pin 18) configured as output and used for an LED alarm
             # GPIO 25 (pin 22) used for the calibration buttons
             # GPIO 27 (pin 13) used for the calibration buttons

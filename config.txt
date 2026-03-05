@@ -4,7 +4,7 @@
 #####################  a n a l o g  s e n s o r  s e c t i o n  ######################
 temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
 temp,    2, 12,  Room Temp,            60-82,            10020, -0.4 
-ph,      3,  4,  PH,                   7.8-8.5,         -32.876, 730.45
+ph,      3,  4,  PH,                   7.7-8.5,  -34.4156, 736.5052
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
 rflow,   6,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
@@ -49,7 +49,7 @@ sample_time=1
 # PH high calibration solution at 21 C
 ph_calibrate_high=9.23
 # PH low calibration solution at 21 C
-ph_calibrate_low=6.88
+ph_calibrate_low=4.0
 # smtp server to use for sending alerts
 smtp=smtp.gmail.com
 # Subject line in the alert email
