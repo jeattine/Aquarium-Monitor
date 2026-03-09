@@ -600,7 +600,7 @@ class GpioCtl:
             # GPIO 13 is used for the system LED
             # GPIO 12 is used to enable maintenance mode which disables alarm checking
         }        
-        self.alarm_led = LED(24)  # Raspberry pin 18
+        self.external_led = LED(24)  # Raspberry pin 18
         
         # Analog mapping is a sequential map of port numbers to channels
         #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
@@ -803,10 +803,16 @@ class GpioCtl:
         return 1
 
     def set_alarm_led(self):
-        self.alarm_led.blink(on_time=0.5, off_time=0.5)
+        self.external_led.blink(on_time=0.5, off_time=0.5)
+
+    def set_maintenance_led(self):
+        self.external_led.on()
         
     def reset_alarm_led(self):
-        self.alarm_led.off()
+        self.external_led.off()
+
+    def reset_maintenace_led(self):
+        self.external_led.off()
 
     def update_display(self):
         with canvas(self.display) as draw:
@@ -919,12 +925,11 @@ class GpioCtl:
  
     def set_maintenance(self):
         self.maintenance_mode = True
-        self.set_alarm_led()
+        self.set_maintenance_led()
         
     def reset_maintenance(self):
         self.maintenance_mode = False
-        if not self.alarm_led_active:
-            self.reset_alarm_led()
+        self.reset_maintenance_led()
  
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:

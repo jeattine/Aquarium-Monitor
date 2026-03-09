@@ -7,7 +7,7 @@ import time
 # Bounce_time filters out the electrical noise
 btn = Button(6, hold_time=5, pull_up=True, bounce_time=0.05)
 last_release_time = 0
-double_click_threshold = 0.5
+double_click_threshold = 1.0
 was_held = False
 
 def handle_hold():
