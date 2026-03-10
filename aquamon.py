@@ -811,7 +811,7 @@ class GpioCtl:
     def reset_alarm_led(self):
         self.external_led.off()
 
-    def reset_maintenace_led(self):
+    def reset_maintenance_led(self):
         self.external_led.off()
 
     def update_display(self):
