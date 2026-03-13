@@ -329,7 +329,7 @@ class Ph(GpioAnalog):
         # This class tracks the max and min values/timestamps and logs PH values every hour
         self.slope = float(self.config_info[5].lstrip())
         self.offset = float(self.config_info[6].lstrip())
-        self.samples = deque([(8.1 * self.slope + self.offset)] * 16, maxlen=16)
+        self.samples = deque([(8.1 * self.slope + self.offset)] * 32, maxlen=32)
         self.current_ph = 8.0
         self.ema_value = None
         self.alpha = 0.2  # 20% of new average mixed with 80% previous

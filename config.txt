@@ -43,7 +43,7 @@ floor,  19,  1,  Floor,                1,                Wet, Dry
 # Network and Sampling Configuration
 #------------------------------------------------------------------------------------
 # Seconds between updates of the cloud-based status file
-server_update_freq=120
+server_update_freq=60
 # Seconds between sampling the GPIO device inputs
 sample_time=1
 # PH high calibration solution at 21 C
