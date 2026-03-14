@@ -19,15 +19,13 @@ The Raspberry Pi board, Perma-Proto Hat with the two MCP3008 ICs, and the wiring
 
 ![Internals](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/internal.jpg)
 
-The custom 3D printed enclosure:
-
-![Enclosure](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/enclosure.jpg)
-
 The assembled unit:
 
-![Assembled1](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled1.jpg)
+![Assembled3](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled3.jpg)
 
 ![Assembled2](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled2.jpg)
+
+![Assembled1](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled1.jpg)
 
 The following images show the various sensors that feed the inputs to the GPIO device: 
   
