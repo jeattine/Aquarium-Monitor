@@ -484,14 +484,14 @@ class Ph(GpioAnalog):
         self.controller.sync_to_cloud(filename, remote_filename)
         
 class CalibrationButtons:
-    def __init__(self, ph, controller):
-        self.ph = ph
+    def __init__(self, controller):
+        self.ph = controller.ph_sensor
         self.controller = controller
         self.btn_low = Button(25, hold_time=3)
         self.btn_high = Button(27, hold_time=3)
         
-        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low)
-        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high)
+        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low) if self.controller.maintenance_mode else None
+        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high) if self.controller.maintenance_mode else None
 
 class MaintenanceModeButton:
     def __init__(self, controller):
@@ -523,6 +523,7 @@ class GpioCtl:
         self.cloud_status_path = None
         self.cloud_config_path = None
         self.cloud_phlog_path = None
+        self.ph_sensor = None
         
         # List of required environment variables
         required_vars = {
@@ -617,6 +618,14 @@ class GpioCtl:
         self.load_config(self.local_config_path)
         
         print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
+
+        # Find the Ph object in the list of initialized sensors
+        self.ph_sensor = next((x for x in self.my_gpios if isinstance(x, Ph)), None)
+        
+        # Initialize the calibration buttons and the Maintenance switch
+        if self.ph_sensor:
+            self.cal_btns = CalibrationButtons(self)
+        self.maintenance_btn = MaintenanceModeButton(self)
 
         # Initialize SPI Hardware
         try:
@@ -930,6 +939,9 @@ class GpioCtl:
     def reset_maintenance(self):
         self.maintenance_mode = False
         self.reset_maintenance_led()
+        # reset any partial PH calibration actions
+        self.ph_sensor.raw_low = None
+        self.ph_sensor.raw_high = None
  
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
@@ -958,12 +970,6 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    # Find the Ph object in the list of initialized sensors
-    ph_sensor = next((x for x in controller.my_gpios if isinstance(x, Ph)), None)
-    if ph_sensor:
-        cal_btns = CalibrationButtons(ph_sensor, controller)
-    maintenance_btn = MaintenanceModeButton(controller)
-    
     while True:
         try:
             controller.read_sensors_and_update()
