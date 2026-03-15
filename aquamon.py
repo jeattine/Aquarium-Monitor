@@ -334,7 +334,7 @@ class Ph(GpioAnalog):
         self.current_ph = 8.0
         self.raw_low = None
         self.raw_high = None
-        self.min_max_init()
+        self.min_max_init(datetime.now())
         self.log_stamp = datetime.now().hour
         log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
@@ -365,17 +365,19 @@ class Ph(GpioAnalog):
         #print(f"{self.samples}\n")
 
         # Do min/max reporting daily
-        current_day = datetime.now().day
+        current_time = self.controller.convert_to_local_time(datetime.now())
+        current_day = current_time.day
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
-            self.min_max_init()
+            self.min_max_init(current_time)
+
         # Use calibrated slope and offset to convert to PH
         self.current_ph = (self.averaged_sample - self.offset) / self.slope
 
         # Record PH in controller for Display Panel
         self.controller.display_ph = self.current_ph
 
-        if self.test_active:
+        if self.test_active and not self.controller.maintenance_mode:
             if self.current_ph > self.max_ph:
                 self.max_ph = self.current_ph
                 self.max_timestamp = datetime.now()
@@ -386,10 +388,9 @@ class Ph(GpioAnalog):
     def read_value(self):
         return self.current_ph
 
-    def min_max_init(self):
+    def min_max_init(self, current_time):
         self.max_ph = 4
         self.min_ph = 12
-        current_time = datetime.now()
         self.max_timestamp = current_time
         self.min_timestamp = current_time
         self.day_stamp = current_time.day
@@ -407,8 +408,8 @@ class Ph(GpioAnalog):
 
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
-        min_ts = self.controller.convert_to_local_time(self.min_timestamp).strftime("%I:%M %p")
-        max_ts = self.controller.convert_to_local_time(self.max_timestamp).strftime("%I:%M %p")
+        min_ts = self.min_timestamp.strftime("%I:%M %p")
+        max_ts = self.max_timestamp.strftime("%I:%M %p")
         return f'{value:2.1f}  max:{self.max_ph:3.1f} at {max_ts}  min:{self.min_ph:3.1f} at {min_ts}'
 
     def calibrate(self, target):
