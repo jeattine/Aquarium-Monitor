@@ -45,7 +45,7 @@ floor,  19,  1,  Floor,                1,                Wet, Dry
 # Seconds between updates of the cloud-based status file
 server_update_freq=60
 # Seconds between sampling the GPIO device inputs
-sample_time=1
+sample_time=2
 # PH high calibration solution at 21 C
 ph_calibrate_high=9.23
 # PH low calibration solution at 21 C

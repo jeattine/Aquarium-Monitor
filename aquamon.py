@@ -109,6 +109,7 @@ class GpioAnalog(Gpio):
         super(GpioAnalog, self).__init__(gpio_controller, config_file_data)
         self.averaged_sample = -1.0
         self.enable_averaging = enable_averaging
+        self.trim_amount = 8 # Trim 12.5% from top and bottom of sample buffer
         # create a 16 entry buffer with values spanning the 10 bit A/D converter range
         # Initialize a deque with a fixed maximum length.
         # This replaces manual slicing [1:]
@@ -127,11 +128,11 @@ class GpioAnalog(Gpio):
          # Simply append; the oldest value is dropped automatically
         new_val = self.controller.read_analog(self.config_info[1].lstrip())
         self.samples.append(new_val)
-        # Create a running averaged sample dumping the 1/8th highest and 1/8th lowest samples
+        # Create a running average. Dump (1/trim_amount) from highest/lowest samples
         if self.enable_averaging:
             temp_samples = sorted(list(self.samples))
             # Trim 12.5% lowest and 12.5% highest
-            trim_low = int(len(temp_samples)/8)
+            trim_low = int(len(temp_samples)/self.trim_amount)
             trim_high = int(len(temp_samples)) - trim_low
             temp_samples = temp_samples[trim_low:trim_high]
 
@@ -331,16 +332,14 @@ class Ph(GpioAnalog):
         self.offset = float(self.config_info[6].lstrip())
         self.samples = deque([(8.1 * self.slope + self.offset)] * 32, maxlen=32)
         self.current_ph = 8.0
-        self.ema_value = None
-        self.alpha = 0.2  # 20% of new average mixed with 80% previous
         self.raw_low = None
         self.raw_high = None
-
         self.min_max_init()
         self.log_stamp = datetime.now().hour
         log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
+        self.trim_amount = 4  # Trim 25% from top and bottom of sample buffer
 
         def log_converter(*args):
             return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.controller.timezone)).timetuple()
@@ -359,24 +358,18 @@ class Ph(GpioAnalog):
     def read_sensor_and_update(self):
         # Use parent class logic to get the trimmed mean
         super().read_sensor_and_update()
-        current_trimmed_mean = self.averaged_sample
+        # Record PH in controller for Display Panel
+        self.controller.display_ph = self.averaged_sample
 
-        # debugging
+        # Debug
         #print(f"{self.samples}\n")
 
-        # Apply Exponential Moving Average (EMA)
-        if self.ema_value is None:
-            self.ema_value = current_trimmed_mean
-        else:
-            self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
-        # Overwrite the result used for PH calculation
-        self.averaged_sample = self.ema_value
-
+        # Do min/max reporting daily
         current_day = datetime.now().day
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
             self.min_max_init()
-
+        # Use calibrated slope and offset to convert to PH
         self.current_ph = (self.averaged_sample - self.offset) / self.slope
 
         # Record PH in controller for Display Panel
@@ -396,15 +389,16 @@ class Ph(GpioAnalog):
     def min_max_init(self):
         self.max_ph = 4
         self.min_ph = 12
-        self.max_timestamp = datetime.now()
-        self.min_timestamp = datetime.now()
-        self.day_stamp = datetime.now().day
+        current_time = datetime.now()
+        self.max_timestamp = current_time
+        self.min_timestamp = current_time
+        self.day_stamp = current_time.day
 
     def log(self, value):
         current_hour = datetime.now().hour
         if current_hour != self.log_stamp:
             # Logging library handles the timestamp and file writing
-            self.ph_logger.info(f" {value:2.1f}")
+            self.ph_logger.info(f" {value:2.2f}")
             self.log_stamp = current_hour
             local_file = self.controller.local_phlog_path
             remote_file = self.controller.cloud_phlog_path
