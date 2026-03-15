@@ -761,7 +761,7 @@ class GpioCtl:
 
     def cloud_file_exists(self, remote_path):
         # 'rclone lsjson' returns a JSON list of files. 
-        # If the file doesn't exist, the list is empty.
+        # If the file doesn't exist, the file name will not be in the returned list.
         try:
             result = subprocess.run(
                 ["rclone", "lsjson", remote_path],
