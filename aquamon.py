@@ -335,6 +335,7 @@ class Ph(GpioAnalog):
         self.raw_low = None
         self.raw_high = None
         self.min_max_init(datetime.now())
+        self.day_stamp = 0  # Force re-initialization on first sensor read after timezone is avail
         self.log_stamp = datetime.now().hour
         log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
@@ -370,6 +371,7 @@ class Ph(GpioAnalog):
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
             self.min_max_init(current_time)
+            self.day_stamp = current_time.day
 
         # Use calibrated slope and offset to convert to PH
         self.current_ph = (self.averaged_sample - self.offset) / self.slope
@@ -393,7 +395,6 @@ class Ph(GpioAnalog):
         self.min_ph = 12
         self.max_timestamp = current_time
         self.min_timestamp = current_time
-        self.day_stamp = current_time.day
 
     def log(self, value):
         current_hour = datetime.now().hour
