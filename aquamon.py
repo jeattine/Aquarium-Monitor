@@ -350,7 +350,7 @@ class Ph(GpioAnalog):
             # Keep 5 backup files, each max 10K
             handler = RotatingFileHandler(log_path, maxBytes=10**4, backupCount=5)
             # Standard CSV-like format: Time,Value
-            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
             handler.setFormatter(formatter)
 
             handler.formatter.converter = log_converter
@@ -382,10 +382,10 @@ class Ph(GpioAnalog):
         if self.test_active and not self.controller.maintenance_mode:
             if self.current_ph > self.max_ph:
                 self.max_ph = self.current_ph
-                self.max_timestamp = datetime.now()
+                self.max_timestamp = current_time
             if self.current_ph < self.min_ph:
                 self.min_ph = self.current_ph
-                self.min_timestamp = datetime.now()
+                self.min_timestamp = current_time
 
     def read_value(self):
         return self.current_ph
