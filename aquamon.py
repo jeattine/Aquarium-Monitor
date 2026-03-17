@@ -314,7 +314,7 @@ class Battery(GpioAnalog):
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
         # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
-        voltage = self.averaged_sample/68.31
+        voltage = self.averaged_sample/67.29
         return voltage
 
     def read_value_text(self, value):
