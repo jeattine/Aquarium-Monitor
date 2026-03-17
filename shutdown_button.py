@@ -25,7 +25,7 @@ def handle_release():
         was_held = False # Reset for next time
         return
     current_time = time.time()
-    # If the time since last click is between 0.05s and 0.5s, it's a double-click
+    # If time is between 0.05s and 'double_click_threshold', it's a double-click
     if 0.05 < (current_time - last_release_time) < double_click_threshold:
         print("Confirmed Double-click: Rebooting...")
         check_call(['sudo', 'reboot'])
