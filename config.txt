@@ -23,7 +23,7 @@ gpiod,  16,  2,  Switch Power,         14:20-14:00?0,    On, Off
 gpiod,  17,  8,  Protein Skimmer,      1,                Full, Ok
 gpiod,  18,  4,  Top-off reservoir,    0,                Ok,  Low
 floor,  19,  1,  Floor,                1,                Wet, Dry
-#gpiod, 20,  8,  (unused digital),     NA,               NA
+gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 21,  8,  (unused digital),     NA,               NA
 #gpiod, 22,  1,  (unused digital),     NA,               NA
 #gpiod, 23,  1,  (unused digital),     NA,               NA
