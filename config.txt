@@ -19,7 +19,7 @@ hilow,   9,  1,  Sump Level,           14:20-14:00?256-768, Low, High, Ok
 ###################  d  i g i t a l   s e n s o r   s e c t i o n  ###################
 gpiod,  14,  2,  Return Pump,          14:20-14:00?0,    Running, Shutdown
 gpiod,  15,  4,  Overflow box,         1,                High, Ok
-gpiod,  16,  2,  Switch Power,         14:20-14:00?0,    On, Off
+gpiod,  16,  2,  Switched Power,       14:20-14:00?0,    On, Off
 gpiod,  17,  8,  Protein Skimmer,      1,                Full, Ok
 gpiod,  18,  4,  Top-off reservoir,    0,                Ok,  Low
 floor,  19,  1,  Floor,                1,                Wet, Dry
