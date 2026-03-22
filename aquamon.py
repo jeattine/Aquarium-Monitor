@@ -657,7 +657,8 @@ class GpioCtl:
 
         # If already switched to maintenance mode during startup, set it.
         if self.maintenance_btn.btn_maint.is_pressed:
-            self.set_maintenance
+            print("Maintenance mode detected during startup!\n")
+            self.set_maintenance()
 
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
