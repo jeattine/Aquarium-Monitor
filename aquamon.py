@@ -512,6 +512,8 @@ class GpioCtl:
         self.alarm_led_active = False
         self.alarm_text = None
         self.maintenance_mode = False
+        self.maintenance_start = None
+        self.maintenance_email_sent = False
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
@@ -543,7 +545,8 @@ class GpioCtl:
         # Global integer settings
         self.global_integers = [
             'server_update_freq',
-            'sample_time'
+            'sample_time',
+            'maintenance_timeout'
         ]
 
         # Global float settings
@@ -568,7 +571,8 @@ class GpioCtl:
             'ph_calibrate_high',
             'server_update_freq',
             'sample_time',
-            'email_recipients'
+            'email_recipients',
+            'maintenance_timeout'
         ]
 
         # Supported cloud providers
@@ -647,6 +651,13 @@ class GpioCtl:
         except:
             self.display = None
             print("OLED not found, continuing without display.")
+
+        # Initialize starting timeout for maintenance active warning emails
+        self.maintenance_delta = self.maintenance_timeout
+
+        # If already switched to maintenance mode during startup, set it.
+        if self.maintenance_btn.btn_maint.is_pressed:
+            self.set_maintenance
 
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
@@ -894,6 +905,8 @@ class GpioCtl:
             if self.alarm_led_active:
                 self.reset_alarm_led()
                 self.alarm_led_active = False
+        # Test for an extended maintenance mode. May have been left on accidentally
+        self.test_long_maintenance_mode()
 
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
@@ -931,6 +944,7 @@ class GpioCtl:
     def set_maintenance(self):
         self.maintenance_mode = True
         self.set_maintenance_led()
+        self.maintenance_start = datetime.now()
 
     def reset_maintenance(self):
         self.maintenance_mode = False
@@ -938,6 +952,16 @@ class GpioCtl:
         # reset any partial PH calibration actions
         self.ph_sensor.raw_low = None
         self.ph_sensor.raw_high = None
+
+    def test_long_maintenance_mode(self):
+        if self.maintenance_mode and self.maintenance_start + timedelta(minutes=self.maintenance_delta) < datetime.now():
+            self.email_text.append(f"Warning: maintenance mode active for {self.maintenance_delta} minute(s)\n")
+            self.maintenance_email_sent = True
+            self.maintenance_delta += self.maintenance_timeout
+        elif self.maintenance_email_sent and not self.maintenance_mode:
+            self.email_text.append("Maintenance mode is no longer active. Alerts re-enabled\n")
+            self.maintenance_email_sent = False
+            self.maintenance_delta = self.maintenance_timeout
 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:

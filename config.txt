@@ -44,12 +44,14 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #------------------------------------------------------------------------------------
 # Seconds between updates of the cloud-based status file
 server_update_freq=60
-# Seconds between sampling the GPIO device inputs
+# Seconds between sampling the input ports
 sample_time=2
 # PH high calibration solution at 21 C
 ph_calibrate_high=9.21
 # PH low calibration solution at 21 C
 ph_calibrate_low=6.87
+# Active maintenance mode warning timeout in minutes
+maintenance_timeout=30
 # smtp server to use for sending alerts
 smtp=smtp.gmail.com
 # Subject line in the alert email
