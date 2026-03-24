@@ -24,7 +24,11 @@ The Raspberry Pi board, Perma-Proto Hat with the two MCP3008 ICs, and the wiring
 
 ![Assembled1](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled1.jpg)
 
-The following images show the various sensors that feed the inputs to the GPIO device:
+Internal wiring schematic:
+
+![Schematic](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/schematic.png)
+
+The following images show the various sensors that feed the monitor through the RCA ports:
 
 
 ![Flow Detection](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/FlowDetect.png)
