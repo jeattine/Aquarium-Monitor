@@ -38,6 +38,7 @@ The following images show the various sensors that feed the monitor through the 
 ![Conditional and Temp Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/ConditionalTempDetect.png)
 ![Battery Condition](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/BatteryCondition.png)
 ![PH Detect page 1](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/PhDetect.png)
+![Filter Roller](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Filterroller.png)
 
 ## Raspberry Pi Setup for the Aquarium Monitor
 
