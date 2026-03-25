@@ -411,7 +411,7 @@ class Ph(GpioAnalog):
         # need to include the mix/max values/timestamps
         min_ts = self.min_timestamp.strftime("%I:%M %p")
         max_ts = self.max_timestamp.strftime("%I:%M %p")
-        return f'{value:2.1f}  max:{self.max_ph:3.1f} at {max_ts}  min:{self.min_ph:3.1f} at {min_ts}'
+        return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
 
     def calibrate(self, target):
         # Capture the current raw value from the running average
