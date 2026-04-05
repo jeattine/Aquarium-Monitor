@@ -13,6 +13,7 @@ import logging
 import socket
 import subprocess
 import spidev
+import signal
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
@@ -517,11 +518,13 @@ class GpioCtl:
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
-        self.local_phlog_path = Path(__file__).parent / 'phlog.txt'
+        self.local_phlog_path = Path('/tmp/phlog.txt')
+        self.saved_phlog_path = Path(Path(__file__).parent / 'logs/phlog.txt')
         self.cloud_status_path = None
         self.cloud_config_path = None
         self.cloud_phlog_path = None
         self.ph_sensor = None
+        self.terminate_pending = False
 
         # List of required environment variables
         required_vars = {
@@ -608,6 +611,12 @@ class GpioCtl:
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
         #    MCP3008 chip 2 channels 5-7 are currently not configured
 
+        # Register the SIGTERM handler
+        signal.signal(signal.SIGTERM, self.handle_shutdown)
+
+        # Restore logs kept in tmp from last process termination
+        self.restore_logs()
+
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
             value = os.environ.get(env_var)
@@ -663,8 +672,12 @@ class GpioCtl:
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
 
-    def __del__(self):
-        """Clean up hardware resources on exit"""
+    def handle_shutdown(self, signum, frame):
+        print("SIGTERM received. Stopping loop and entering cleanup...")
+        self.terminate_pending = True
+
+    def cleanup(self):
+        # Clean up hardware resources
         try:
             if hasattr(self, 'spi0'):
                 self.spi1.close()
@@ -672,7 +685,15 @@ class GpioCtl:
                 self.spi2.close()
             print("SPI buses closed successfully.")
         except Exception as e:
-            print(f"Error during hardware cleanup: {e}")
+            print(f"Hardware resource cleanup error during termination: {e}")
+
+        # Save tmp log file for later restore
+        try:
+            shutil.copy(self.local_phlog_path, self.saved_phlog_path)
+            print("Temporary phlog file stored sucessfully.")
+
+        except Exception as e:
+            print(f"Saving temp phlog to permanent area failed during termination: {e}")
 
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
@@ -964,6 +985,12 @@ class GpioCtl:
             self.maintenance_email_sent = False
             self.maintenance_delta = self.maintenance_timeout
 
+    def restore_logs(self):
+        if os.path.exists(self.saved_phlog_path):
+            shutil.copy(self.saved_phlog_path, self.local_phlog_path)
+            # Clear it so we don't keep restoring old data
+            os.remove(self.saved_phlog_path)
+
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
         try:
@@ -991,18 +1018,19 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    while True:
+    while not controller.terminate_pending:
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
             controller.update_display()
             time.sleep(controller.sample_time)
         except KeyboardInterrupt:
-            print("User requested termination. Exiting.")
+            print("\nUser requested termination. Exiting.")
             break
         except Exception as error:
             print(f"Exception={error} Unhandled! Exiting")
-            raise
+            break
+    controller.cleanup()
 
 if __name__ == '__main__':
     main()
