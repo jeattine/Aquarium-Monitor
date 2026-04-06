@@ -14,6 +14,7 @@ import socket
 import subprocess
 import spidev
 import signal
+import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
@@ -524,7 +525,6 @@ class GpioCtl:
         self.cloud_config_path = None
         self.cloud_phlog_path = None
         self.ph_sensor = None
-        self.terminate_pending = False
 
         # List of required environment variables
         required_vars = {
@@ -611,6 +611,9 @@ class GpioCtl:
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
         #    MCP3008 chip 2 channels 5-7 are currently not configured
 
+        # Create a stop event
+        self.stop_event = threading.Event()
+
         # Register the SIGTERM handler
         signal.signal(signal.SIGTERM, self.handle_shutdown)
 
@@ -674,7 +677,7 @@ class GpioCtl:
 
     def handle_shutdown(self, signum, frame):
         print("SIGTERM received. Stopping loop and entering cleanup...")
-        self.terminate_pending = True
+        self.stop_event.set()
 
     def cleanup(self):
         # Clean up hardware resources
@@ -1018,12 +1021,13 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = GpioCtl()
-    while not controller.terminate_pending:
+    while True:
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
             controller.update_display()
-            time.sleep(controller.sample_time)
+            if controller.stop_event.wait(controller.sample_time):
+                break
         except KeyboardInterrupt:
             print("\nUser requested termination. Exiting.")
             break
