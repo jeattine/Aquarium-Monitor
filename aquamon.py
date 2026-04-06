@@ -617,9 +617,6 @@ class GpioCtl:
         # Register the SIGTERM handler
         signal.signal(signal.SIGTERM, self.handle_shutdown)
 
-        # Restore logs kept in tmp from last process termination
-        self.restore_logs()
-
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
             value = os.environ.get(env_var)
@@ -674,6 +671,9 @@ class GpioCtl:
 
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
+
+        # Restore logs kept in tmp from last process termination
+        self.restore_logs()
 
     def handle_shutdown(self, signum, frame):
         print("SIGTERM received. Stopping loop and entering cleanup...")
