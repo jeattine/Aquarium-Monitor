@@ -148,80 +148,59 @@ In the SSH session, run the following command to create a new service file:
 
 Bash
 
-sudo nano /etc/systemd/system/aquamon.service
+sudo nano /etc/systemd/system/reef\_monitor.service
 
 Service file:
 
-\[Unit\]
-
+[Unit]
 Description=Reef Aquarium Monitor Script
+After=network-online.target
+Wants=network-online.target
 
-After=network.target
-
-\[Service\]
-
+[Service]
 User=aquamon
-
 \# Add Environment variable here
-
-Environment="AQUAMON\_EMAIL=[your\_email@gmail.com](mailto:your_email@gmail.com)"
-
-Environment="AQUAMON\_EMAIL\_PW=\_PW=your\_app\_password"
-
+Environment="AQUAMON_EMAIL=aquamonemail@gmail.com"
+Environment="AQUAMON_EMAIL_PW=abcdefghijklmnop"
 \# Path to your python interpreter and your script
-
 ExecStart=/home/aquamon/reef\_monitor/env/bin/python3 -u /home/aquamon/reef\_monitor/aquamon.py
-
 \# Working directory (helps if your script loads fonts or images from its own folder)
-
 WorkingDirectory=/home/aquamon/reef\_monitor
-
 \# Restart logic
-
 Restart=on-failure
-
 \# Wait 10 seconds before restarting to prevent rapid-fire loops
-
 RestartSec=10s
 
-\[Install\]
-
+[Install]
 WantedBy=multi-user.target
 
 Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
 
-\[Unit\]
+sudo nano /etc/systemd/system/reef\_shutdown.service
 
+[Unit]
 Description=Reef Monitor Hardware Shutdown Button
-
 After=network.target
 
-\[Service\]
-
+[Service]
 Type=simple
-
 ExecStart=/usr/bin/python3 /home/aquamon/reef\_monitor/shutdown\_button.py
-
 Restart=always
-
 RestartSec=5
-
 User=root
 
-\[Install\]
-
+[Install]
 WantedBy=multi-user.target
-
 ### Managing the Monitor
 
 Now that it's running in the background, use these commands to check on it:
 
 | Task | Command |
 | --- | --- |
-| Check if it's running | sudo systemctl status aquamon.service |
-| Stop the monitor | sudo systemctl stop aquamon.service |
-| Restart monitor | sudo systemctl restart aquamon.service |
-| View live logs | journalctl -u aquamon.service -f |
+| Check if it's running | sudo systemctl status reef\_monitor.service |
+| Stop the monitor | sudo systemctl stop reef\_monitor.service |
+| Restart monitor | sudo systemctl restart reef\_monitor.service |
+| View live logs | journalctl -u reef\_monitor.service -f |
 
 ### Install Rclone
 
@@ -234,6 +213,17 @@ The command rclone copy is **one-way only**. It behaves like a "push" or an "upl
 *   When it asks **"Use auto config?"**, type **n** (No).
 *   Copy the command given (e.g., rclone authorize "dropbox") and run it on your Windows PC.
 *   Log in to Dropbox in your browser, click **Allow**, and paste the resulting token back into the Pi.
+
+## Setup aliases
+
+nano ~/.bash\_aliases
+
+alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef\_monitor/aquamon.py && echo "aquam>
+alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef\_monitor/config.txt && echo "config>
+alias monitor-logs='TZ="America/Chicago" journalctl -u reef\_monitor.service --no-pager -n 40'
+
+The update-\* aliases make code testing convenient. SSH to the system from your device, and assuming your device has dropbox access to the local repository directory, run the scripts to update the code and configuration files as needed.
+
 
 ## Monitor Enclosure
 
