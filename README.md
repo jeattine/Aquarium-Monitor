@@ -3,9 +3,9 @@
 
 ![Assembled3](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled3.jpg)
 
-Python-based aquarium monitor program running under the Raspberry Pi OS Lite Linux operating system on a Raspberry Pi 4 board. A Adafruit Perma-Proto Hat is mounted on the board to house two MCP3008 10-bit ADC with SPI interface. This provides the analog inputs to the monitor. The HAT also provides solder pads for each of the other GPIO pins used as digital inputs. The monitor has 23 RCA sockets for input of the sensors. One RCA socket is used for output for the alarm/maintenance_mode LED indicator. The monitor has a button to force a reset or a shutdown of the OS/monitor. The monitor provides two buttons for the calibration of the PH probe, with a PH-Low and a PH-High that can be set to the values of the calibration fluid in the configuration file or the override file. The calibration action will write its result back the configuration file. The monitor status, PH logs, and updated configuration files can be observed in a cloud folder (I am using Dropbox) by external devices. This is accomplished using 'rclone copyto'. Monitor alerts are surfaced by emails sent to the recipients listed in the configuration file. The monitor will autostart after the Linux OS boots. It is started via a service and set to be restarted if it abnormally terminates. There is a maintenance mode switch on the front that when activated, alarms are disabled and the red LED light will turn on. In this mode the display will show Maintenance text along with the current PH value. The PH value display is helpful during PH calibration so that it can be seen that the PH values have stabilized with the probe in the calibration fluid.
+Python-based aquarium monitor program running under the Raspberry Pi OS Lite Linux operating system on a Raspberry Pi 4 board. A Adafruit Perma-Proto Hat is mounted on the board to house two MCP3008 10-bit ADC with SPI interface. This provides the analog inputs to the monitor. The HAT also provides solder pads for each of the other GPIO pins used as digital inputs. The monitor has 23 RCA sockets for input of the sensors. One RCA socket is used for output for the alarm/maintenance_mode LED indicator. The monitor has a button to force a reset or a shutdown of the OS/monitor. The monitor provides two buttons for the calibration of the PH probe, with a PH-Low and a PH-High that can be set to the values of the calibration fluid in the configuration file or the override file. The calibration action will write its result back the configuration file. The monitor status, PH logs, and updated configuration files can be observed in a cloud folder by external devices. I am using Dropbox. This is accomplished using 'rclone copyto'. Monitor alerts are surfaced by emails sent to the recipients listed in the configuration file. The monitor will autostart after the Linux OS boots. It is started via a service and set to be restarted if it abnormally terminates. There is a maintenance mode switch on the front that when activated, alarms are disabled and the red LED light will turn on. In this mode the display will show Maintenance text along with the current PH value. The PH value display is helpful during PH calibration so that it can be seen that the PH values have stabilized with the probe in the calibration fluid.
 
-The program design has a 'Main' that constructs an GpioCtl object and loops calling methods on the GpioCtl object instantiation. 'Main' will stay in a continuous loop until an exception causes it to exit. The input to the program is a config.txt file expected to be in the current directory. This file is composed of two sections. The first section assigns the port numbers of the hardware to various classes to read and process the sensor data connected to those port inputs. Some examples are classes to monitor temperature, PH, Flow, water level, and light. These classes are derived from either a GPIO_Digital or a GPIO_Analog class, depending on the type of sensor. The GPIO_Digital and GPIO_Analog are derived from the GPIO base class. In addition to the GPIO assignment to classes, this section of the config file also gives a descriptive name to each port input and defines the expected values/ranges/time-periods for operation. Another input to the program is the override.txt file. This file resides at a cloud location, either Dropbox or Onedrive depending on how the system is configured. This override file provides a convenient way to modify a subset of the settings in the config.txt file. For example when going on vacation I may want to modify the recipient list of the email alerts. I can do this by simply modifying the override file in the cloud folder from any device that has access to that folder. The utility Tailscale is installed on the monitor and on personal devices that then have direct ssh access to the monitor. This sets up a split VPN tunnel directly between the personal devices and the monitor, allowing safe client SSH access to the monitor from outside the local home network. This is useful if I need to perform a more drastic administrative or service action when away from home. When away from my primary laptop, the need may arise to modify the config.txt or the aquamon.py file. My IPAD and phone both have a dropbox application and Tailscale to create the VPN tunnel. On the IPAD I am using the Terminal# app which will get me into an SSH session. On the phone I use Termux. On the monitor I have two aliases set up: update-aquamon and update_config. They will use 'rclone copyto' to copy files from my local GitHub repository located in dropbox to the monitor. From there a systemctl restart put the new files in play. For an editor on the ipad I am using Runestone. It's simple, lightweight, and color-codes nicely editing python code.
+The program design has a 'Main' that constructs an GpioCtl object and loops calling methods on the GpioCtl object instantiation. 'Main' will stay in a continuous loop until an exception or a termination event causes it to exit. The input to the program is a config.txt file expected to be in the current directory. This file is composed of two sections. The first section assigns the port numbers of the hardware to various classes to read and process the sensor data connected to those port inputs. Some examples are classes to monitor temperature, PH, Flow, water level, and light. These classes are derived from either a GPIO_Digital or a GPIO_Analog class, depending on the type of sensor. The GPIO_Digital and GPIO_Analog are derived from the GPIO base class. In addition to the GPIO assignment to classes, this section of the config file also gives a descriptive name to each port input and defines the expected values/ranges/time-periods for operation. Another input to the program is the override.txt file. This file resides at a cloud location, either Dropbox or Onedrive depending on how the system is configured. This override file provides a convenient way to modify a subset of the settings in the config.txt file. For example when going on vacation I may want to modify the recipient list of the email alerts. I can do this by simply modifying the override file in the cloud folder from any device that has access to that folder. The utility Tailscale is installed on the monitor and on personal devices. This provides direct ssh access to the monitor via a split VPN tunnel directly between the personal devices and the monitor, allowing safe client SSH access to the monitor from outside the local home network. SSH access is useful if I need to perform a more drastic administrative or service action when away from home. When away from my primary laptop, the need may arise to modify the config.txt or the aquamon.py file. My iPAD and phone both have a dropbox application and Tailscale. On the iPAD I am using the Terminal# app which will get me into an SSH session. On the phone I use Termux. On the monitor I have two aliases set up: update-aquamon and update_config. They will use 'rclone copyto' to copy files from my local GitHub repository located in dropbox to the monitor. From there a systemctl restart put the new files in play. For an editor on the iPAD I am using Runestone. It's simple, lightweight, and color-codes nicely editing python code.
 
 Code structure:
 
@@ -68,7 +68,7 @@ Once the card is flashed, pop it into the Pi and power it up. Wait about 2 minut
 
 Modern Raspberry Pi OS (Bookworm) requires a **Virtual Environment (venv)** to prevent breaking system-wide packages.
 
-**\# Update the system**
+### Update the system
 
 sudo apt update sudo apt upgrade -y  
 sudo apt install python3-dev -y  
@@ -79,17 +79,17 @@ sudo apt-get install fonts-freefont-ttf
 curl -fsSL https://tailscale.com/install.sh | sh  
 sudo tailscale up  
 
-**\# Create a project folder**
+### Create a project folder
 
 mkdir reef\_monitor && cd reef\_monitor
 
-\# Create and activate a Virtual Environment
+### Create and activate a Virtual Environment
 
 python -m venv env
 
 source env/bin/activate
 
-**\# Install the necessary python libraries**
+### Install the necessary python libraries
 
 pip install gpiozero spidev luma.oled smbus2 rpi-lgpio
 
@@ -106,7 +106,7 @@ Since we are on Windows, the easiest way to move your .py and config.txt files t
 
 PowerShell
 
-\# Run this from the folder where your script is saved on Windows  
+### Run this from the folder where your script is saved on Windows
 scp aquarium\_script.py config.txt pi@aquamon.local:~/reef\_monitor/
 
 ### Set the environment variables and activate environment
@@ -128,11 +128,9 @@ source ~/reef\_monitor/env/bin/activate
 To test it:  
 python reef\_monitor/aquarium\_script.py
 
-Use a systemd service to have it start on boot and keep on running.
+### Setup a systemd service to have it start on boot
 
 In the SSH session, run the following command to create a new service file:
-
-Bash
 
 sudo nano /etc/systemd/system/reef\_monitor.service
 
@@ -177,22 +175,12 @@ User=root
 
 [Install]  
 WantedBy=multi-user.target  
-### Managing the Monitor  
-
-Now that it's running in the background, use these commands to check on it:
-
-| Task | Command |
-| --- | --- |
-| Check if it's running | sudo systemctl status reef\_monitor.service |
-| Stop the monitor | sudo systemctl stop reef\_monitor.service |
-| Restart monitor | sudo systemctl restart reef\_monitor.service |
-| View live logs | journalctl -u reef\_monitor.service -f |
 
 ### Install Rclone
 
-**2\. Configure the OneDrive Remote**
+**2\. Configure the Dropbox Remote**
 
-The command rclone copy is **one-way only**. It behaves like a "push" or an "upload." It will take your local current.txt and upload it to the cloud. It will **not** look at what else is in your OneDrive and try to download it.
+The command rclone copy is **one-way only**. It behaves like an "upload" or a "download". It will **not** try to synchronize with all files in the cloud folder.
 
 *   Run rclone config on Raspberry Pi.
 *   Name it dropbox, pick the dropbox number.
@@ -200,7 +188,7 @@ The command rclone copy is **one-way only**. It behaves like a "push" or an "upl
 *   Copy the command given (e.g., rclone authorize "dropbox") and run it on your Windows PC.
 *   Log in to Dropbox in your browser, click **Allow**, and paste the resulting token back into the Pi.
 
-## Setup aliases
+### Setup aliases
 
 nano ~/.bash\_aliases
 
@@ -209,6 +197,17 @@ alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/
 alias monitor-logs='TZ="America/Chicago" journalctl -u reef\_monitor.service --no-pager -n 40'  
 
 The update-\* aliases make code testing convenient. SSH to the system from your device, and assuming your device has dropbox access to the local repository directory, run the scripts to update the code and configuration files as needed.
+
+## Managing the Monitor  
+
+When the monitor is up and running via the reef_monitor service, use these commands to check on it:
+
+| Task | Command |
+| --- | --- |
+| Check if it's running | sudo systemctl status reef\_monitor.service |
+| Stop the monitor | sudo systemctl stop reef\_monitor.service |
+| Restart monitor | sudo systemctl restart reef\_monitor.service |
+| View live logs | journalctl -u reef\_monitor.service -f |
 
 
 ## Monitor Enclosure
