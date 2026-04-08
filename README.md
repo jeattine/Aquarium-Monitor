@@ -200,17 +200,28 @@ The update-\* aliases make code testing convenient. SSH to the system from your 
 
 ## Managing the Monitor  
 
-When the monitor is up and running via the reef_monitor service, use these commands to check on it:
+When the monitor is up and running via the reef_monitor service, use these commands to work with it:
 
 | Task | Command |
 | --- | --- |
 | Check if it's running | sudo systemctl status reef\_monitor.service |
 | Stop the monitor | sudo systemctl stop reef\_monitor.service |
 | Restart monitor | sudo systemctl restart reef\_monitor.service |
-| View live logs | journalctl -u reef\_monitor.service -f |
+| View past logs | monitor-logs |
+| View live logs | sudo journalctl -u reef_monitor.service -f |
+| Update monitor code | update-aquamon |
+| Update config file | update-config |
 
 
 ## Monitor Enclosure
 
-The enclosure and related parts were all printed on a 3D printer. I have included the FreeCad source files for these parts. They can be modified with FreeCad and/or exported to 3mf files for printing.
+The enclosure and related parts were all printed on a 3D printer. I have included the FreeCad source files for these parts. They can be modified with FreeCad and/or exported to 3mf files for printing.  
+
+# Aquarium Systems
+
+The following diagrams depict my overall aquarium environment. The first diagram shows the interconnections of pumps, filters, lights, scrubber, monitor, etc.. The second diagram shows the management and plumbing of both saltwater and R/O water.  
+
+![Electrical System](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Electrical.png)  
+
+![Liquid Management](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Liquid.png)
 
