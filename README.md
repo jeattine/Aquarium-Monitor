@@ -106,7 +106,7 @@ Since we are on Windows, the easiest way to move your .py and config.txt files t
 
 PowerShell
 
-### Run this from the folder where your script is saved on Windows
+Run this from the folder where your script is saved on Windows  
 scp aquarium\_script.py config.txt pi@aquamon.local:~/reef\_monitor/
 
 ### Set the environment variables and activate environment
@@ -134,8 +134,8 @@ In the SSH session, run the following command to create a new service file:
 
 sudo nano /etc/systemd/system/reef\_monitor.service
 
-Service file:
-
+Service file:  
+```
 [Unit]  
 Description=Reef Aquarium Monitor Script  
 After=network-online.target  
@@ -157,11 +157,12 @@ RestartSec=10s
 
 [Install]  
 WantedBy=multi-user.target  
+```
 
 Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
 
-sudo nano /etc/systemd/system/reef\_shutdown.service
-
+sudo nano /etc/systemd/system/reef\_shutdown.service  
+```
 [Unit]  
 Description=Reef Monitor Hardware Shutdown Button  
 After=network.target
@@ -175,6 +176,7 @@ User=root
 
 [Install]  
 WantedBy=multi-user.target  
+```
 
 ### Install Rclone
 
@@ -190,11 +192,12 @@ The command rclone copy is **one-way only**. It behaves like an "upload" or a "d
 
 ### Setup aliases
 
-nano ~/.bash\_aliases
-
+nano ~/.bash\_aliases  
+```
 alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef\_monitor/aquamon.py && echo "aquam>  
 alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef\_monitor/config.txt && echo "config>  
 alias monitor-logs='TZ="America/Chicago" journalctl -u reef\_monitor.service --no-pager -n 40'  
+```
 
 The update-\* aliases make code testing convenient. SSH to the system from your device, and assuming your device has dropbox access to the local repository directory, run the scripts to update the code and configuration files as needed.
 
@@ -217,7 +220,9 @@ When the monitor is up and running via the reef_monitor service, use these comma
 
 The enclosure and related parts were all printed on a 3D printer. I have included the FreeCad source files for these parts. They can be modified with FreeCad and/or exported to 3mf files for printing.  
 
-# Aquarium Systems
+***
+
+# The Big Picture
 
 The following diagrams depict my overall aquarium environment. The first diagram shows the interconnections of pumps, filters, lights, scrubber, monitor, etc.. The second diagram shows the management and plumbing of both saltwater and R/O water.  
 
