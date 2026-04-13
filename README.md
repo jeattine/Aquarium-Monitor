@@ -159,7 +159,13 @@ RestartSec=10s
 WantedBy=multi-user.target  
 ```
 
-Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
+Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. 
+
+You must then enable the service. This creates a symlink (a shortcut) that tells the system to run this script when it reaches multi-user.target (normal bootup).  
+
+sudo systemctl enable reef_monitor.service  
+
+I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
 
 sudo nano /etc/systemd/system/reef\_shutdown.service  
 ```
@@ -177,6 +183,10 @@ User=root
 [Install]  
 WantedBy=multi-user.target  
 ```
+
+Also enable this service:
+
+sudo systemctl enable shutdown.service  
 
 ### Install Rclone
 
