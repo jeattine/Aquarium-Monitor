@@ -59,10 +59,21 @@ The following images show the various sensors that feed the monitor through the 
 Once the card is flashed, pop it into the Pi and power it up. Wait about 2 minutes for the first boot.
 
 1.  Open **PowerShell** on Windows 11.
-2.  Type: ssh pi@aquamon.local (replace pi and aquamon with the credentials you set).
-3.  If it asks about "authenticity of host," type yes.
+2.  Type:
+    ```
+	ssh pi@aquamon.local
+	```
+	(replace pi and aquamon with the credentials you set).
+3.  If it asks about "authenticity of host," type:
+    ```
+	yes
+	```
 4.  Enter your password. You are now "inside" the Pi.
-5.  Finish and Reboot: sudo reboot. (You'll be disconnected; wait a minute and SSH back in).
+5.  Finish and Reboot:
+    ```
+	sudo reboot
+    ```	
+	(You'll be disconnected; wait a minute and SSH back in).
 
 ### Environment Setup and Libraries
 
@@ -70,6 +81,7 @@ Modern Raspberry Pi OS (Bookworm) requires a **Virtual Environment (venv)** to p
 
 ### Update the system
 
+```
 sudo apt update sudo apt upgrade -y  
 sudo apt install python3-dev -y  
 sudo apt install i2c-tools -y  
@@ -78,62 +90,81 @@ sudo apt install swig liblgpio-dev python3-dev build-essential -y
 sudo apt-get install fonts-freefont-ttf  
 curl -fsSL https://tailscale.com/install.sh | sh  
 sudo tailscale up  
+```
 
 ### Create a project folder
 
+```
 mkdir reef\_monitor && cd reef\_monitor
+```
 
 ### Create and activate a Virtual Environment
 
+```
 python -m venv env
-
 source env/bin/activate
+```
 
 ### Install the necessary python libraries
 
+```
 pip install gpiozero spidev luma.oled smbus2 rpi-lgpio
+```
 
 ### Enable Hardware Interfaces
 
 The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are disabled by default.  
-1.  In the SSH terminal, type: sudo raspi-config
+1.  In the SSH terminal:
+    ```
+	sudo raspi-config
+	```
 2.  Navigate to **Interface Options**.
 3.  Enable **I2C** and **SPI**.
 
 ### Transfer the code
 
-Since we are on Windows, the easiest way to move your .py and config.txt files to the Pi is using **SCP** (Secure Copy). Open a _new_ PowerShell window on your Windows desktop (not the one logged into the Pi) and run:
+Since we are on Windows, the easiest way to move your .py and config.txt files to the Pi is using **SCP** (Secure Copy). Open a _new_ PowerShell window on your Windows desktop (not the one logged into the Pi) and run:  
 
-PowerShell
-
-Run this from the folder where your script is saved on Windows  
+```
 scp aquarium\_script.py config.txt pi@aquamon.local:~/reef\_monitor/
+```
 
 ### Set the environment variables and activate environment
 
 The code uses os.environ.get('AQUAMON\_EMAIL'), etc. We need to define these on the Pi so the script can see them.  
-1.  In your SSH session, open the profile file: nano ~/.bashrc
-2.  Scroll to the bottom and add:
-
-export AQUAMON\_EMAIL=[your\_email@gmail.com](mailto:your_email@gmail.com)  
-export AQUAMON\_EMAIL\_PW="your\_app\_password"  
-
-source ~/reef\_monitor/env/bin/activate
-
-1.  Save (**Ctrl+O, Enter**) and Exit (**Ctrl+X**).
-2.  Refresh the variables: source ~/.bashrc
+1.  In your SSH session, open the profile file:
+    ````
+    nano ~/.bashrc
+	````
+2.  Scroll to the bottom and add the following:
+    ````
+    export AQUAMON\_EMAIL=[your\_email@gmail.com](mailto:your_email@gmail.com)  
+    export AQUAMON\_EMAIL\_PW="your\_app\_password"
+	````
+3.  Source the script:
+    ````
+    source ~/reef\_monitor/env/bin/activate
+	````
+4.  Save (**Ctrl+O, Enter**) and Exit (**Ctrl+X**).
+5.  Refresh the variables:
+    ``` 
+    source ~/.bashrc
+	```
 
 ### Run and Automate
 
-To test it:  
-python reef\_monitor/aquarium\_script.py
+To test it: 
 
+``` 
+python reef\_monitor/aquarium\_script.py
+```
 ### Setup a systemd service to have it start on boot
 
 In the SSH session, run the following command to create a new service file:
 
+```
 sudo nano /etc/systemd/system/reef\_monitor.service
-
+```
 Service file:  
 ```
 [Unit]  
@@ -162,12 +193,15 @@ WantedBy=multi-user.target
 Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. 
 
 You must then enable the service. This creates a symlink (a shortcut) that tells the system to run this script when it reaches multi-user.target (normal bootup).  
-
+```
 sudo systemctl enable reef_monitor.service  
-
+```
 I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
 
+```
 sudo nano /etc/systemd/system/reef\_shutdown.service  
+```
+
 ```
 [Unit]  
 Description=Reef Monitor Hardware Shutdown Button  
@@ -185,12 +219,11 @@ WantedBy=multi-user.target
 ```
 
 Also enable this service:
-
+```
 sudo systemctl enable shutdown.service  
+```
 
 ### Install Rclone
-
-**2\. Configure the Dropbox Remote**
 
 The command rclone copy is **one-way only**. It behaves like an "upload" or a "download". It will **not** try to synchronize with all files in the cloud folder.
 
@@ -202,7 +235,10 @@ The command rclone copy is **one-way only**. It behaves like an "upload" or a "d
 
 ### Setup aliases
 
+```
 nano ~/.bash\_aliases  
+```
+
 ```
 alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef\_monitor/aquamon.py && echo "aquam>  
 alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef\_monitor/config.txt && echo "config>  
