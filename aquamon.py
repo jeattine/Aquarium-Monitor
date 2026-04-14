@@ -15,6 +15,7 @@ import subprocess
 import spidev
 import signal
 import threading
+import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
@@ -53,7 +54,7 @@ class Gpio:
             if current_value < 0 or self.controller.start_time + timedelta(seconds=120) > datetime.now():
                 return current_value
         self.test_active = True
-        if self.controller.maintenance_mode:
+        if self.controller.maintenance_mode or self.controller.feed_mode:
             return current_value
         conditions = self.config_info[4].lstrip().split('+')
         for condition in conditions:
@@ -494,8 +495,8 @@ class CalibrationButtons:
 class MaintenanceModeButton:
     def __init__(self, controller):
         self.controller = controller
-        self.btn_maint = Button(12, pull_up=True, bounce_time=0.1)
-        self.btn_maint.when_pressed = lambda: self.controller.set_maintenance()
+        self.btn_maint = Button(12, pull_up=True, bounce_time=0.2, hold_time=3)
+        self.btn_maint.when_held = lambda: self.controller.set_maintenance()
         self.btn_maint.when_released = lambda: self.controller.reset_maintenance()
 
 class GpioCtl:
@@ -514,7 +515,12 @@ class GpioCtl:
         self.alarm_led_active = False
         self.alarm_text = None
         self.maintenance_mode = False
+        self.feed_mode = False
         self.maintenance_start = None
+        self.feed_start = None
+        self.feed_seconds = None
+        self.maintenance_held = False
+        self.maintenance_released = None
         self.maintenance_email_sent = False
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
@@ -549,7 +555,8 @@ class GpioCtl:
         self.global_integers = [
             'server_update_freq',
             'sample_time',
-            'maintenance_timeout'
+            'maintenance_timeout',
+            'feed_timeout'
         ]
 
         # Global float settings
@@ -575,7 +582,8 @@ class GpioCtl:
             'server_update_freq',
             'sample_time',
             'email_recipients',
-            'maintenance_timeout'
+            'maintenance_timeout',
+            'feed_timeout'
         ]
 
         # Supported cloud providers
@@ -801,7 +809,7 @@ class GpioCtl:
                 text=True
             )
         except Exception as e:
-            print(f'Error tesitng for override file. Exception: {e}')
+            print(f'Error testing for override file. Exception: {e}')
             result = []
         return "override.txt" in result.stdout.strip()
 
@@ -849,10 +857,16 @@ class GpioCtl:
     def set_maintenance_led(self):
         self.external_led.on()
 
+    def set_feed_led(self):
+        self.external_led.blink(on_time=1.0, off_time=0.5)
+
     def reset_alarm_led(self):
         self.external_led.off()
 
     def reset_maintenance_led(self):
+        self.external_led.off()
+
+    def reset_feed_led(self):
         self.external_led.off()
 
     def update_display(self):
@@ -870,6 +884,12 @@ class GpioCtl:
                     line3 = f"PH:   {self.display_ph:.2f}"
                     draw.text((0, 20), line2, font=self.font_large, fill="white")
                     draw.text((0, 42), line3, font=self.font_large, fill="white")
+                elif self.feed_mode:
+                    line2 = "Feed Mode"
+                    minutes, seconds = divmod(self.feed_seconds, 60)
+                    line3 = f"Countdown: {minutes:02d}:{seconds:02d}"
+                    draw.text((0, 20), line2, font=self.font_large, fill="white")
+                    draw.text((0, 42), line3, font=self.font_medium, fill="white")
                 else:
                     line2 = f"Temp: {self.display_temp:.1f} F"
                     line3 = f"PH:   {self.display_ph:.2f}"
@@ -932,6 +952,8 @@ class GpioCtl:
                 self.alarm_led_active = False
         # Test for an extended maintenance mode. May have been left on accidentally
         self.test_long_maintenance_mode()
+        # Test for feed timeout
+        self.test_feed_timeout()
 
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
@@ -967,16 +989,37 @@ class GpioCtl:
             print(f"Cloud Sync to {remote_dest} Failed : {e}")
 
     def set_maintenance(self):
+        if self.feed_mode:
+            self.reset_feed_mode()
+        self.maintenance_held = True
         self.maintenance_mode = True
         self.set_maintenance_led()
         self.maintenance_start = datetime.now()
 
     def reset_maintenance(self):
-        self.maintenance_mode = False
-        self.reset_maintenance_led()
-        # reset any partial PH calibration actions
-        self.ph_sensor.raw_low = None
-        self.ph_sensor.raw_high = None
+        # If the button was held for 'hold_time' seconds, we must now reset maintenance mode
+        if self.maintenance_held:
+            self.maintenance_held = False # Reset for next time
+            self.maintenance_mode = False
+            self.reset_maintenance_led()
+            # reset any partial PH calibration actions
+            self.ph_sensor.raw_low = None
+            self.ph_sensor.raw_high = None
+        else:
+            self.feed_mode = True
+            self.set_feed_led()
+            self.feed_start = datetime.now()
+
+    def reset_feed_mode(self):
+        self.feed_mode = False
+        self.reset_feed_led()
+
+    def test_feed_timeout(self):
+        if self.feed_mode:
+            feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
+            self.feed_seconds = int(feed_time_remaining.total_seconds())
+            if self.feed_seconds < 0:
+                self.reset_feed_mode()
 
     def test_long_maintenance_mode(self):
         if self.maintenance_mode and self.maintenance_start + timedelta(minutes=self.maintenance_delta) < datetime.now():
@@ -1032,7 +1075,10 @@ def main():
             print("\nUser requested termination. Exiting.")
             break
         except Exception as error:
-            print(f"Exception={error} Unhandled! Exiting")
+            print("Unhandled Exception! Exiting")
+            print("--- Stack Trace Start ---")
+            traceback.print_exc()
+            print("--- Stack Trace End ---")
             break
     controller.cleanup()
 
