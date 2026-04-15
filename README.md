@@ -95,7 +95,7 @@ sudo tailscale up
 ### Create a project folder
 
 ```
-mkdir reef\_monitor && cd reef\_monitor
+mkdir reef_monitor && cd reef_monitor
 ```
 
 ### Create and activate a Virtual Environment
@@ -126,7 +126,7 @@ The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are
 Since we are on Windows, the easiest way to move your .py and config.txt files to the Pi is using **SCP** (Secure Copy). Open a _new_ PowerShell window on your Windows desktop (not the one logged into the Pi) and run:  
 
 ```
-scp aquarium\_script.py config.txt pi@aquamon.local:~/reef\_monitor/
+scp aquarium_script.py config.txt pi@aquamon.local:~/reef_monitor/
 ```
 
 ### Set the environment variables and activate environment
@@ -138,12 +138,12 @@ The code uses os.environ.get('AQUAMON\_EMAIL'), etc. We need to define these on 
 	````
 2.  Scroll to the bottom and add the following:
     ````
-    export AQUAMON\_EMAIL=[your\_email@gmail.com](mailto:your_email@gmail.com)  
-    export AQUAMON\_EMAIL\_PW="your\_app\_password"
+    export AQUAMON_EMAIL=[your_email@gmail.com](mailto:your_email@gmail.com)  
+    export AQUAMON_EMAIL_PW="your_app_password"
 	````
 3.  Source the script:
     ````
-    source ~/reef\_monitor/env/bin/activate
+    source ~/reef_monitor/env/bin/activate
 	````
 4.  Save (**Ctrl+O, Enter**) and Exit (**Ctrl+X**).
 5.  Refresh the variables:
@@ -156,14 +156,14 @@ The code uses os.environ.get('AQUAMON\_EMAIL'), etc. We need to define these on 
 To test it: 
 
 ``` 
-python reef\_monitor/aquarium\_script.py
+python reef_monitor/aquarium_script.py
 ```
 ### Setup a systemd service to have it start on boot
 
 In the SSH session, run the following command to create a new service file:
 
 ```
-sudo nano /etc/systemd/system/reef\_monitor.service
+sudo nano /etc/systemd/system/reef_monitor.service
 ```
 Service file:  
 ```
@@ -174,16 +174,16 @@ Wants=network-online.target
 
 [Service]  
 User=aquamon  
-\# Add Environment variable here  
+# Add Environment variable here  
 Environment="AQUAMON_EMAIL=aquamonemail@gmail.com"  
 Environment="AQUAMON_EMAIL_PW=abcdefghijklmnop"  
-\# Path to your python interpreter and your script  
-ExecStart=/home/aquamon/reef\_monitor/env/bin/python3 -u /home/aquamon/reef\_monitor/aquamon.py  
-\# Working directory (helps if your script loads fonts or images from its own folder)  
-WorkingDirectory=/home/aquamon/reef\_monitor  
-\# Restart logic  
+# Path to your python interpreter and your script  
+ExecStart=/home/aquamon/reef_monitor/env/bin/python3 -u /home/aquamon/reef_monitor/aquamon.py  
+# Working directory (helps if your script loads fonts or images from its own folder)  
+WorkingDirectory=/home/aquamon/reef_monitor  
+# Restart logic  
 Restart=on-failure  
-\# Wait 10 seconds before restarting to prevent rapid-fire loops  
+# Wait 10 seconds before restarting to prevent rapid-fire loops  
 RestartSec=10s  
 
 [Install]  
@@ -199,7 +199,7 @@ sudo systemctl enable reef_monitor.service
 I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
 
 ```
-sudo nano /etc/systemd/system/reef\_shutdown.service  
+sudo nano /etc/systemd/system/reef_shutdown.service  
 ```
 
 ```
@@ -209,7 +209,7 @@ After=network.target
 
 [Service]  
 Type=simple  
-ExecStart=/usr/bin/python3 /home/aquamon/reef\_monitor/shutdown\_button.py  
+ExecStart=/usr/bin/python3 /home/aquamon/reef_monitor/shutdown_button.py  
 Restart=always  
 RestartSec=5  
 User=root
@@ -236,13 +236,13 @@ The command rclone copy is **one-way only**. It behaves like an "upload" or a "d
 ### Setup aliases
 
 ```
-nano ~/.bash\_aliases  
+nano ~/.bash_aliases  
 ```
 
 ```
-alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef\_monitor/aquamon.py && echo "aquam>  
-alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef\_monitor/config.txt && echo "config>  
-alias monitor-logs='TZ="America/Chicago" journalctl -u reef\_monitor.service --no-pager -n 40'  
+alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef_monitor/aquamon.py && echo "aquam>  
+alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef_monitor/config.txt && echo "config>  
+alias monitor-logs='TZ="America/Chicago" journalctl -u reef_monitor.service --no-pager -n 40'  
 ```
 
 The update-\* aliases make code testing convenient. SSH to the system from your device, and assuming your device has dropbox access to the local repository directory, run the scripts to update the code and configuration files as needed.
