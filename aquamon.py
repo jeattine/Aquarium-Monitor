@@ -249,11 +249,11 @@ class TempSensor(GpioAnalog):
             # Convert to Fahrenheit
             temp_f = (temp_c * 9.0) / 5.0 + 32.0
 
-            # 5. Adjust with calibration offset from config
+            # Adjust with calibration offset from config
             calibration = float(self.config_info[6].lstrip())
             self.current_temp = temp_f + calibration
 
-            # 6. Update Controller's global display variable
+            # Update Controller's display variable
             if self.is_water_sensor:
                 self.controller.display_temp = self.current_temp
 
@@ -551,22 +551,22 @@ class GpioCtl:
             'battery': Battery,
             'ph': Ph
         }
-        # Global integer settings
-        self.global_integers = [
+        # Configurable integer settings
+        self.configurable_integers = [
             'server_update_freq',
             'sample_time',
             'maintenance_timeout',
             'feed_timeout'
         ]
 
-        # Global float settings
-        self.global_floats = [
+        # Configurable float settings
+        self.configurable_floats = [
             'ph_calibrate_low',
             'ph_calibrate_high'
         ]
 
-        # All required global settings
-        self.global_settings = self.global_integers + self.global_floats + [
+        # All required configurable settings
+        self.configurable_settings = self.configurable_integers + self.configurable_floats + [
             'smtp',
             'email_subject',
             'cloud_path',
@@ -709,12 +709,12 @@ class GpioCtl:
     def load_config(self, filename):
         with open(filename, 'r') as gpio_config:
             for line in gpio_config:
-                # Handle global configuration settings
+                # Handle configurable configuration settings
                 clean_line = line.strip()
                 if not clean_line or clean_line.startswith('#'):
                     continue
                 if '=' in clean_line:
-                    # Handle global settings
+                    # Handle configurable settings
                     self.parse_setting(clean_line)
                 elif ',' in clean_line:
                     # Handle sensor instantiations
@@ -729,7 +729,7 @@ class GpioCtl:
 
         if self.settings_unexpected:
             print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")
-        self.settings_missing = list(set(self.global_settings) - set(self.settings_found))
+        self.settings_missing = list(set(self.configurable_settings) - set(self.settings_found))
         if self.settings_missing:
             sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
 
@@ -764,7 +764,7 @@ class GpioCtl:
             subprocess.run(['rclone', 'copyto', self.cloud_override_path, self.local_override_path, '--quiet'], check=True)
             with open(self.local_override_path, 'r') as gpio_override:
                 for line in gpio_override:
-                    # Handle global configuration settings
+                    # Handle configurable configuration settings
                     clean_line = line.strip()
                     if not clean_line or clean_line.startswith('#'):
                         continue
@@ -780,13 +780,13 @@ class GpioCtl:
     def parse_setting(self, line):
         key, value = line.split('=', 1)
         # Use setattr to dynamically assign properties to the class instance
-        if key.strip() in self.global_integers:
+        if key.strip() in self.configurable_integers:
             try:
                 value_int = int(value.strip())
             except Exception as error:
                 sys.exit(f'Specified value for {key.strip()} must be an integer!')
             setattr(self, key.strip(), value_int)
-        elif key.strip() in self.global_floats:
+        elif key.strip() in self.configurable_floats:
             try:
                 value_float = float(value.strip())
             except Exception as error:
@@ -794,7 +794,7 @@ class GpioCtl:
             setattr(self, key.strip(), value_float)
         else:
             setattr(self, key.strip(), value.strip())
-        if key.strip() in self.global_settings:
+        if key.strip() in self.configurable_settings:
             self.settings_found.append(key.strip())
         else:
             self.settings_unexpected.append(key.strip())

@@ -53,7 +53,7 @@ ph_calibrate_low=6.87
 # Active maintenance mode warning timeout in minutes
 maintenance_timeout=30
 # Feed mode timeout in minutes
-feed_timeout=20
+feed_timeout=15
 # smtp server to use for sending alerts
 smtp=smtp.gmail.com
 # Subject line in the alert email
