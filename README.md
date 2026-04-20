@@ -276,3 +276,7 @@ The following diagrams depict my overall aquarium environment. The first diagram
 
 ![Liquid Management](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Liquid.png)
 
+# License Information
+
+This project is licensed under the MIT License, except for the /Print3D folder, which is licensed under CC BY-NC 4.0.
+
