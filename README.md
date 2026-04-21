@@ -1,7 +1,7 @@
 
 # Aquarium monitor
 
-![Assembled3](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled3.jpg)
+![Assembled3](./images/assembled3.jpg)
 
 Python-based aquarium monitor program running under the Raspberry Pi OS Lite Linux operating system on a Raspberry Pi 4 board. A Adafruit Perma-Proto Hat is mounted on the board to house two MCP3008 10-bit ADC with SPI interface. This provides the analog inputs to the monitor. The HAT also provides solder pads for each of the other GPIO pins used as digital inputs. The monitor has 23 RCA sockets for input of the sensors. One RCA socket is used for output for the alarm/maintenance_mode LED indicator. The monitor has a button to force a reset or a shutdown of the OS/monitor. The monitor provides two buttons for the calibration of the PH probe, with a PH-Low and a PH-High that can be set to the values of the calibration fluid in the configuration file or the override file. The calibration action will write its result back the configuration file. The monitor status, PH logs, and updated configuration files can be observed in a cloud folder by external devices. I am using Dropbox. This is accomplished using 'rclone copyto'. Monitor alerts are surfaced by emails sent to the recipients listed in the configuration file. The monitor will autostart after the Linux OS boots. It is started via a service and set to be restarted if it abnormally terminates. There is a maintenance mode switch on the front that when activated, alarms are disabled and the red LED light will turn on. In this mode the display will show Maintenance text along with the current PH value. The PH value display is helpful during PH calibration so that it can be seen that the PH values have stabilized with the probe in the calibration fluid.
 
@@ -9,36 +9,36 @@ The program design has a 'Main' that constructs an GpioCtl object and loops call
 
 Code structure:
 
-![Class structure](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Design2.png)
+![Class structure](./images/Design2.png)
 
-![Class structure](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/ExampleOutput.png)
+![Class structure](./images/ExampleOutput.png)
 
 This is the bigger picture, showing the network interfaces and wiring to the various sensors:
-![Summary](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Summary.png)
+![Summary](./images/Summary.png)
 
 The Raspberry Pi board, Perma-Proto Hat with the two MCP3008 ICs, and the wiring to the RCA inputs:
 
-![Internals](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/internal.jpg)
+![Internals](./images/internal.jpg)
 
-![Assembled2](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled2.jpg)
+![Assembled2](./images/assembled2.jpg)
 
-![Assembled1](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/assembled1.jpg)
+![Assembled1](./images/assembled1.jpg)
 
 Internal wiring schematic:
 
-![Schematic](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/schematic.png)
+![Schematic](./images/schematic.png)
 
 The following images show the various sensors that feed the monitor through the RCA ports:
 
 
-![Flow Detection](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/FlowDetect.png)
-![Hi Low Level Detection](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/HiLowDetect.png)
-![Random Flow Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/RandomFlowDetect.png)
-![Misc Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/VariousDetect.png)
-![Conditional and Temp Detect](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/ConditionalTempDetect.png)
-![Battery Condition](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/BatteryCondition.png)
-![PH Detect page 1](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/PhDetect.png)
-![Filter Roller](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Filterroller.png)
+![Flow Detection](./images/FlowDetect.png)
+![Hi Low Level Detection](./images/HiLowDetect.png)
+![Random Flow Detect](./images/RandomFlowDetect.png)
+![Misc Detect](./images/VariousDetect.png)
+![Conditional and Temp Detect](./images/ConditionalTempDetect.png)
+![Battery Condition](./images/BatteryCondition.png)
+![PH Detect page 1](./images/PhDetect.png)
+![Filter Roller](./images/Filterroller.png)
 
 ## Raspberry Pi Setup for the Aquarium Monitor
 
@@ -272,9 +272,9 @@ The enclosure and related parts were all printed on a 3D printer. I have include
 
 The following diagrams depict my overall aquarium environment. The first diagram shows the interconnections of pumps, filters, lights, scrubber, monitor, etc.. The second diagram shows the management and plumbing of both saltwater and R/O water.  
 
-![Electrical System](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Electrical.png)  
+![Electrical System](./images/Electrical.png)  
 
-![Liquid Management](https://github.com/jeattine/Aquarium-Monitor/blob/main/images/Liquid.png)
+![Liquid Management](./images/Liquid.png)
 
 # License Information
 
