@@ -118,8 +118,8 @@ The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are
     ```
 	sudo raspi-config
 	```
-2.  Navigate to **Interface Options**.
-3.  Enable **I2C** and **SPI**.
+1.  Navigate to **Interface Options**.
+1.  Enable **I2C** and **SPI**.
 
 ### Transfer the code
 
