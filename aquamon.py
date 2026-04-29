@@ -29,11 +29,17 @@ from PIL import ImageFont
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
 
-# --- HARDWARE MAPPING ---
+# --- HARDWARE I/O MAPPING ---
 # MCP3008 Chip 0: Channels 0-7 (Temp, PH, etc.)
 # MCP3008 Chip 1: Channels 8+
 # OLED: I2C Address 0x3C
-# Buttons: GPIO 25 (pH Low Calibrate), GPIO 27 (pH High Calibrate)
+# PH-EZO: I2C Address 0x63 (BNC connector)
+# GPIO 6  (pin 31) used for system restart
+# GPIO 12 (pin 32) is used to enable maintenance mode
+# GPIO 13 (pin 33) is used for the system LED
+# GPIO 24 (pin 18) is used for output to remote LED status
+# GPIO 25 (pin 22) used for pH low Calibrate
+# GPIO 27 (pin 13) used for pH High Calibrate
 
 class Sensor:
     def __init__(self, controller, config_file_data):
@@ -335,7 +341,7 @@ class Ph(Sensor):
         self.ph_logger.setLevel(logging.INFO)
 
         try:
-            self.ph_ezo = EzoDevice(controller.serial, address=0x63)
+            self.ph_ezo = EzoDevice(controller, address=0x63)
         except Exception as e:
             sys.exit(f"Could not create PH monitor thread object. {e}")
 
@@ -352,6 +358,17 @@ class Ph(Sensor):
 
             handler.formatter.converter = log_converter
             self.ph_logger.addHandler(handler)
+
+    def start_thread(self):
+        self.ph_ezo.start()
+
+    def terminate_thread(self):
+        self.ph_ezo.running = False
+        self.ph_ezo.join(timeout=3)
+        if self.ph_ezo.is_alive():
+            print("Warning: pH ezo thread did not exit gracefully.")
+        else:
+            print("pH_ezo thread ended gracefully.")
 
     def read_sensor_and_update(self):
         self.current_ph = self.ph_ezo.get_ph()
@@ -404,19 +421,51 @@ class CalibrationButtons:
     def __init__(self, controller):
         self.ph_sensor = controller.ph_sensor
         self.controller = controller
-        self.btn_low = Button(25, hold_time=3)
-        self.btn_high = Button(27, hold_time=3)
+        self.btn_low = Button(25, bounce_time=0.1, hold_time=3)
+        self.btn_high = Button(27, bounce_time=0.1, hold_time=3)
 
-        self.btn_low.when_held = self._handle_low_button
-        self.btn_high.when_held = self._handle_high_button
+        self.btn_low.when_pressed = self._handle_low_pressed_button
+        self.btn_high.when_pressed = self._handle_high_pressed_button
+        self.btn_low.when_held = self._handle_low_held_button
+        self.btn_high.when_held = self._handle_high_held_button
+        self.btn_low.when_released = self._handle_released_button
+        self.btn_high.when_released = self._handle_released_button
 
-    def _handle_low_button(self):
+    def _handle_high_pressed_button(self):
         if self.controller.maintenance_mode:
-            self.ph_sensor.ph_ezo.calibrate("mid", self.controller.ph_calibrate_low)
+            controller.calibrate_text = "Cal HIGH"
+            controller.set_calibrate_mode()
+            with self.controller.oled_lock:
+                self.controller.update_display()
 
-    def _handle_high_button(self):
+    def _handle_low_pressed_button(self):
         if self.controller.maintenance_mode:
-            self.ph_sensor.ph_ezo.calibrate("high", self.controller.ph_calibrate_high)
+            controller.calibrate_text = "Cal LOW"
+            controller.set_calibrate_mode()
+            with self.controller.oled_lock:
+                self.controller.update_display()
+
+    def _handle_high_held_button(self):
+        if self.controller.maintenance_mode:
+            if self.ph_sensor.ph_ezo.calibrate("high", self.controller.ph_calibrate_high):
+                self.controller.calibrate_text = "Success"
+            else:
+                self.controller.calibrate_text = "Failed"
+            with self.controller.oled_lock:
+                self.controller.update_display()
+
+    def _handle_low_held_button(self):
+        if self.controller.maintenance_mode:
+            if self.ph_sensor.ph_ezo.calibrate("high", self.controller.ph_calibrate_low):
+                self.controller.calibrate_text = "Success"
+            else:
+                self.controller.calibrate_text = "Failed"
+            with self.controller.oled_lock:
+                self.controller.update_display()
+
+    def _handle_released_button(self):
+        if self.controller.maintenance_mode:
+            controller.reset_calibrate_mode()
 
 class MaintenanceModeButton:
     def __init__(self, controller):
@@ -426,10 +475,11 @@ class MaintenanceModeButton:
         self.btn_maint.when_released = self.controller.reset_maintenance
 
 class EzoDevice(threading.Thread):
-    def __init__(self, i2c_interface, address=0x63):
+    def __init__(self, controller, address):
         super().__init__()
         # i2c_interface is the luma.core.interface.serial.i2c object
-        self.interface = i2c_interface
+        self.controller = controller
+        self.interface = controller.serial_bus
         self.address = address
         self.current_ph = 8.0
         self.running = True
@@ -438,33 +488,38 @@ class EzoDevice(threading.Thread):
 
     def run(self):
         while self.running:
-            try:
-                # Send 'R' command (Read)
-                # luma uses address as the first arg, then the data
-                self.interface.write(self.address, [ord('R'), ord('\r')])
+            if not self.controller.calibrate_mode:
+                self.poll()
+            time.sleep(2)
 
-                # Wait for EZO processing
-                time.sleep(1.1)
+    def poll(self):
+        try:
+            # Access the underlying smbus object inside luma
+            bus = self.interface._bus
 
-                # Read 20 bytes from the EZO
-                # luma.core uses read(address, count)
-                data = self.interface.read(self.address, 20)
+            # Send 'R' command (Read)
+            # luma uses address as the first arg, then the data
+            bus.write_i2c_block_data(self.address, 0, [ord('R'), ord('\r')])
 
-                # First byte is the response code (1 = Success)
-                if data[0] == 1:
-                    # Filter out the success code and null bytes
-                    char_list = [chr(x) for x in data[1:] if x != 0]
-                    ph_str = "".join(char_list).strip()
+            # Wait for EZO processing
+            time.sleep(1.1)
 
-                    with self.lock:
-                        self.current_ph = float(ph_str)
-                else:
-                    print(f"PH Ezo returned bad response code: {data[0]}")
-            except Exception as e:
-                print(f"Error reading PH EZO. {e}")
-                raise
+            # Read 20 bytes from the EZO
+            # luma.core uses read(address, count)
+            data = bus.read_i2c_block_data(self.address, 0, 20)
 
-            time.sleep(2) # Refresh rate
+            # First byte is the response code (1 = Success)
+            if data[0] == 1:
+                # Filter out the success code and null bytes
+                char_list = [chr(x) for x in data[1:] if x != 0]
+                ph_str = "".join(char_list).strip()
+
+                with self.lock:
+                    self.current_ph = float(ph_str)
+            else:
+                print(f"PH Ezo returned bad response code: {data[0]}")
+        except Exception as e:
+            print(f"Error reading PH EZO. {e}")
 
     def get_ph(self):
         with self.lock:
@@ -472,16 +527,16 @@ class EzoDevice(threading.Thread):
 
     def calibrate(self, point, value):
         """Called by PH_low and PH_high buttons when in Maintenance Mode"""
-        cmd = f"Cal,{point},{value}\r"
+        bus = self.interface._bus
+        cmd = [ord(c) for c in f"Cal,{point},{value}\r"]
         try:
-            self.interface.write(self.address, [ord(c) for c in cmd])
-            # !!!!!!!! Indicate success on OLED screen
+            bus.write_i2c_block_data(self.address, 0, cmd)
         except Exception as e:
             print(f"Calibration failed with exception {e}")
-            # !!!!! INDICATE FAILURE ON OLED !!!!!!!!!
-
-        # Allow time for the hardware to write to EEPROM and for message on OLED to be seen
-        time.sleep(2)
+            return False
+        # Allow time for the hardware to write to EEPROM
+        time.sleep(1.3)
+        return True
 
 class Control:
     def __init__(self):
@@ -515,6 +570,8 @@ class Control:
         self.cloud_config_path = None
         self.cloud_phlog_path = None
         self.ph_sensor = None
+        self.calibrate_text = None
+        self.calibrate_mode = False
 
         # List of required environment variables
         required_vars = {
@@ -590,14 +647,7 @@ class Control:
             '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
             '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05)  # Raspberry pin 16
         }
-        # Port/GPIO 24 (Raspberry pin 18) configured as output and used for an LED alarm
-        # Port 25 is a BNC connector, wired to the I2C bus (addr 0x63) via PH EZO board
-        # GPIO 25 (pin 22) used for the calibration buttons
-        # GPIO 27 (pin 13) used for the calibration buttons
-        # GPIO 6  (pin 31) used for system restart
-        # GPIO 13 is used for the system LED
-        # GPIO 12 is used to enable maintenance mode which disables alarm checking
-
+        # Port 24 (GPIO 24) used as output to the remote status LED
         self.external_led = LED(24)  # Raspberry pin 18
 
         # Analog mapping is a sequential map of port numbers to channels
@@ -605,11 +655,20 @@ class Control:
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
         #    MCP3008 chip 2 channels 5-7 are currently not configured
 
+        self.oled_lock = threading.Lock()
+
         # Create a stop event
         self.stop_event = threading.Event()
 
         # Register the SIGTERM handler
         signal.signal(signal.SIGTERM, self.handle_shutdown)
+
+        try:
+            self.serial_bus = i2c(port=1, address=0x3C)
+            self.display = ssd1306(self.serial_bus)
+        except:
+            self.display = None
+            print("OLED not found, continuing without display.")
 
         # Make sure required env vars are set and exit immediately if not.
         for attr, env_var in required_vars.items():
@@ -633,7 +692,7 @@ class Control:
             self.cal_btns = CalibrationButtons(self)
             try:
                 # Start the PH monitor thread
-                self.ph_sensor.ph_ezo.start()
+                self.ph_sensor.start_thread()
             except Exception as e:
                 sys.exit(f"Critical Error: Could not start the PH monitor thread. {e}")
 
@@ -655,12 +714,6 @@ class Control:
         self.font_large = ImageFont.truetype(font_path, 26)
         self.font_medium = ImageFont.truetype(font_path, 16)
 
-        try:
-            self.serial = i2c(port=1, address=0x3C)
-            self.display = ssd1306(self.serial)
-        except:
-            self.display = None
-            print("OLED not found, continuing without display.")
 
         # Initialize starting timeout for maintenance active warning emails
         self.maintenance_delta = self.maintenance_timeout
@@ -693,10 +746,7 @@ class Control:
 
         # Cleanup the ph_ezo
         if self.ph_sensor:
-            self.ph_sensor.ph_ezo.running = False
-            self.ph_sensor.ph_ezo.join(timeout=3)
-            if self.ph_sensor.ph_ezo.is_alive():
-                print("Warning: pH ezo thread did not exit gracefully.")
+            self.ph_sensor.terminate_thread()
 
         # Clear the OLED
         if self.display:
@@ -884,8 +934,13 @@ class Control:
                     line3 = f"{self.alarm_text}"
                     draw.text((0, 20), line2, font=self.font_large, fill="white")
                     draw.text((0, 44), line3, font=self.font_medium, fill="white")
+                elif self.calibrate_mode:
+                    line2 = self.calibrate_text
+                    line3 = f"PH:   {self.display_ph:.2f}"
+                    draw.text((0, 20), line2, font=self.font_large, fill="white")
+                    draw.text((0, 42), line3, font=self.font_large, fill="white")
                 elif self.maintenance_mode:
-                    line2 = "Maintenance!"
+                    line2 = "Maintenance"
                     line3 = f"PH:   {self.display_ph:.2f}"
                     draw.text((0, 20), line2, font=self.font_large, fill="white")
                     draw.text((0, 42), line3, font=self.font_large, fill="white")
@@ -1037,6 +1092,12 @@ class Control:
             self.maintenance_email_sent = False
             self.maintenance_delta = self.maintenance_timeout
 
+    def set_calibrate_mode(self):
+        self.calibrate_mode = True
+
+    def reset_calibrate_mode(self):
+        self.calibrate_mode = False
+
     def restore_logs(self):
         if os.path.exists(self.saved_phlog_path):
             shutil.copy(self.saved_phlog_path, self.local_phlog_path)
@@ -1074,7 +1135,8 @@ def main():
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            controller.update_display()
+            with controller.oled_lock:
+                controller.update_display()
             if controller.stop_event.wait(controller.sample_time):
                 break
         except KeyboardInterrupt:
