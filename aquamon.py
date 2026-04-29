@@ -435,14 +435,14 @@ class CalibrationButtons:
         if self.controller.maintenance_mode:
             controller.calibrate_text = "Cal HIGH"
             controller.set_calibrate_mode()
-            with self.controller.oled_lock:
+            with self.controller.i2c_lock:
                 self.controller.update_display()
 
     def _handle_low_pressed_button(self):
         if self.controller.maintenance_mode:
             controller.calibrate_text = "Cal LOW"
             controller.set_calibrate_mode()
-            with self.controller.oled_lock:
+            with self.controller.i2c_lock:
                 self.controller.update_display()
 
     def _handle_high_held_button(self):
@@ -451,7 +451,7 @@ class CalibrationButtons:
                 self.controller.calibrate_text = "Success"
             else:
                 self.controller.calibrate_text = "Failed"
-            with self.controller.oled_lock:
+            with self.controller.i2c_lock:
                 self.controller.update_display()
 
     def _handle_low_held_button(self):
@@ -460,7 +460,7 @@ class CalibrationButtons:
                 self.controller.calibrate_text = "Success"
             else:
                 self.controller.calibrate_text = "Failed"
-            with self.controller.oled_lock:
+            with self.controller.i2c_lock:
                 self.controller.update_display()
 
     def _handle_released_button(self):
@@ -499,14 +499,16 @@ class EzoDevice(threading.Thread):
 
             # Send 'R' command (Read)
             # luma uses address as the first arg, then the data
-            bus.write_i2c_block_data(self.address, 0, [ord('R'), ord('\r')])
+            with controller.i2c_lock:
+                bus.write_i2c_block_data(self.address, 0, [ord('R'), ord('\r')])
 
             # Wait for EZO processing
             time.sleep(1.1)
 
             # Read 20 bytes from the EZO
             # luma.core uses read(address, count)
-            data = bus.read_i2c_block_data(self.address, 0, 20)
+            with controller.i2c_lock:
+                data = bus.read_i2c_block_data(self.address, 0, 20)
 
             # First byte is the response code (1 = Success)
             if data[0] == 1:
@@ -530,7 +532,8 @@ class EzoDevice(threading.Thread):
         bus = self.interface._bus
         cmd = [ord(c) for c in f"Cal,{point},{value}\r"]
         try:
-            bus.write_i2c_block_data(self.address, 0, cmd)
+            with controller.i2c_lock:
+                bus.write_i2c_block_data(self.address, 0, cmd)
         except Exception as e:
             print(f"Calibration failed with exception {e}")
             return False
@@ -655,7 +658,7 @@ class Control:
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
         #    MCP3008 chip 2 channels 5-7 are currently not configured
 
-        self.oled_lock = threading.Lock()
+        self.i2c_lock = threading.Lock()
 
         # Create a stop event
         self.stop_event = threading.Event()
@@ -1135,7 +1138,7 @@ def main():
         try:
             controller.read_sensors_and_update()
             controller.test_and_report()
-            with controller.oled_lock:
+            with controller.i2c_lock:
                 controller.update_display()
             if controller.stop_event.wait(controller.sample_time):
                 break
