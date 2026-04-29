@@ -35,9 +35,9 @@ from luma.core.render import canvas
 # OLED: I2C Address 0x3C
 # Buttons: GPIO 25 (pH Low Calibrate), GPIO 27 (pH High Calibrate)
 
-class Gpio:
-    def __init__(self, gpio_controller, config_file_data):
-        self.controller = gpio_controller
+class Sensor:
+    def __init__(self, controller, config_file_data):
+        self.controller = controller
         self.config_info = config_file_data
         # Initialize very old time
         self.last_sent_alert = datetime.now() - timedelta(days=365)
@@ -107,9 +107,9 @@ class Gpio:
         # Let the derived classes optionally maintain a log.
         pass
 
-class GpioAnalog(Gpio):
-    def __init__(self, gpio_controller, config_file_data, enable_averaging = True):
-        super(GpioAnalog, self).__init__(gpio_controller, config_file_data)
+class GpioAnalog(Sensor):
+    def __init__(self, controller, config_file_data, enable_averaging = True):
+        super(GpioAnalog, self).__init__(controller, config_file_data)
         self.averaged_sample = -1.0
         self.enable_averaging = enable_averaging
         self.trim_amount = 8 # Trim 12.5% from top and bottom of sample buffer
@@ -120,9 +120,6 @@ class GpioAnalog(Gpio):
 
     def read_value(self):
         return self.averaged_sample
-
-    def read_condition(self):
-        return f'range:{self.config_info[4].strip()}'
 
     def read_value_text(self, value):
         return f'{value:6.1f}'
@@ -141,9 +138,9 @@ class GpioAnalog(Gpio):
 
             self.averaged_sample = sum(temp_samples) / len(temp_samples)
 
-class GpioDigital(Gpio):
-    def __init__(self, gpio_controller, config_file_data):
-        super(GpioDigital, self).__init__(gpio_controller, config_file_data)
+class GpioDigital(Sensor):
+    def __init__(self, controller, config_file_data):
+        super(GpioDigital, self).__init__(controller, config_file_data)
         self.snapshot = -1
         self.ones_count = 0
         self.zeros_count = 0
@@ -153,9 +150,6 @@ class GpioDigital(Gpio):
 
     def read_value(self):
         return self.snapshot
-
-    def read_condition(self):
-        return ' '
 
     def read_value_text(self, value):
         if value == 0:
@@ -184,12 +178,12 @@ class GpioDigital(Gpio):
             self.snapshot = 0
 
 class FloorWetSensor(GpioDigital):
-    def __init__(self, gpio_controller, config_file_data):
-        super(FloorWetSensor, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(FloorWetSensor, self).__init__(controller, config_file_data)
 
 class CO2deliverySensor(GpioDigital):
-    def __init__(self, gpio_controller, config_file_data):
-        super(CO2deliverySensor, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(CO2deliverySensor, self).__init__(controller, config_file_data)
 
     def read_value_text(self, value):
         # Do not require >3 samples of the same reading, i.e. ignore 'value'
@@ -205,8 +199,8 @@ class CO2deliverySensor(GpioDigital):
         return retval + f' (overall on-time: {percent_on:.0f}%)'
 
 class TempSensor(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(TempSensor, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(TempSensor, self).__init__(controller, config_file_data)
         self.current_temp = 0
         self.ema_value = None
         self.alpha = 0.2  # Smoothing factor
@@ -264,8 +258,8 @@ class TempSensor(GpioAnalog):
         return self.current_temp
 
 class RandomFlowSensor(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(RandomFlowSensor, self).__init__(gpio_controller, config_file_data, False)
+    def __init__(self, controller, config_file_data):
+        super(RandomFlowSensor, self).__init__(controller, config_file_data, False)
         # set the sample buffer to 128 entries
         self.samples = deque(range(0,1024,8), maxlen=128)
 
@@ -274,24 +268,24 @@ class RandomFlowSensor(GpioAnalog):
         return statistics.stdev(self.samples)
 
 class FlowSensorFX4(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(FlowSensorFX4, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(FlowSensorFX4, self).__init__(controller, config_file_data)
 
     def read_value(self):
         flow_volume = 1023 - self.averaged_sample
         return flow_volume
 
 class LightSensor(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(LightSensor, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(LightSensor, self).__init__(controller, config_file_data)
 
     def read_value(self):
         light_level = 1023 - self.averaged_sample
         return light_level
 
 class HighLowLevel(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(HighLowLevel, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(HighLowLevel, self).__init__(controller, config_file_data)
 
     def read_value(self):
         level = self.averaged_sample
@@ -304,8 +298,8 @@ class HighLowLevel(GpioAnalog):
         return self.config_info[7].strip()
 
 class Battery(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(Battery, self).__init__(gpio_controller, config_file_data)
+    def __init__(self, controller, config_file_data):
+        super(Battery, self).__init__(controller, config_file_data)
         # initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
         self.config_info5_float = float(self.config_info[5].strip())
@@ -327,14 +321,10 @@ class Battery(GpioAnalog):
             return f' {self.config_info[8].strip()} ({value:2.1f})'
         return f' {self.config_info[9].strip()} ({value:2.1f})'
 
-class Ph(GpioAnalog):
-    def __init__(self, gpio_controller, config_file_data):
-        super(Ph, self).__init__(gpio_controller, config_file_data)
-        # This class tracks the max and min values/timestamps and logs PH values every hour
-        self.slope = float(self.config_info[5].lstrip())
-        self.offset = float(self.config_info[6].lstrip())
-        self.samples = deque([(8.1 * self.slope + self.offset)] * 32, maxlen=32)
-        self.current_ph = 8.0
+class Ph(Sensor):
+    def __init__(self, controller, config_file_data):
+        super(Ph, self).__init__(controller, config_file_data)
+        self.current_ph = 6.0
         self.raw_low = None
         self.raw_high = None
         self.min_max_init(datetime.now())
@@ -343,7 +333,11 @@ class Ph(GpioAnalog):
         log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
-        self.trim_amount = 4  # Trim 25% from top and bottom of sample buffer
+
+        try:
+            self.ph_ezo = EzoDevice(controller.serial, address=0x63)
+        except Exception as e:
+            sys.exit(f"Could not create PH monitor thread object. {e}")
 
         def log_converter(*args):
             return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.controller.timezone)).timetuple()
@@ -360,14 +354,7 @@ class Ph(GpioAnalog):
             self.ph_logger.addHandler(handler)
 
     def read_sensor_and_update(self):
-        # Use parent class logic to get the trimmed mean
-        super().read_sensor_and_update()
-        # Record PH in controller for Display Panel
-        self.controller.display_ph = self.averaged_sample
-
-        # Debug
-        #print(f"{self.samples}\n")
-
+        self.current_ph = self.ph_ezo.get_ph()
         # Do min/max reporting daily
         current_time = self.controller.convert_to_local_time(datetime.now())
         current_day = current_time.day
@@ -375,9 +362,6 @@ class Ph(GpioAnalog):
             # Start a new max/min period of recording
             self.min_max_init(current_time)
             self.day_stamp = current_time.day
-
-        # Use calibrated slope and offset to convert to PH
-        self.current_ph = (self.averaged_sample - self.offset) / self.slope
 
         # Record PH in controller for Display Panel
         self.controller.display_ph = self.current_ph
@@ -416,92 +400,92 @@ class Ph(GpioAnalog):
         max_ts = self.max_timestamp.strftime("%I:%M %p")
         return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
 
-    def calibrate(self, target):
-        # Capture the current raw value from the running average
-        raw = self.averaged_sample
-        if target == self.controller.ph_calibrate_low:
-            self.raw_low = raw
-        else:
-            self.raw_high = raw
-
-        if self.raw_low and self.raw_high:
-            self.slope = (self.raw_high - self.raw_low) /  (self.controller.ph_calibrate_high - self.controller.ph_calibrate_low)
-            self.offset = self.raw_low - self.controller.ph_calibrate_low * self.slope
-            self.save_to_config()
-            # Reset the stored calibration data to allow future re-calibration
-            self.raw_low = 0
-            self.raw_high = 0
-
-    def save_to_config(self):
-        filename = self.controller.local_config_path
-        remote_filename = self.controller.cloud_config_path
-        temp_filename = filename.with_suffix('.tmp')
-        backup_filename = filename.with_suffix('.bak')
-        updated_lines = []
-
-        try:
-            with open(filename, 'r') as f:
-                lines = f.readlines()
-
-            for line in lines:
-                # Identify the pH line (starts with 'ph')
-                if line.strip().startswith('ph,'):
-                    parts = line.split(',')
-                    # parts[0]=class, [1]=gpio, [2]=nag, [3]=label, [4]=condition
-                    # parts[5]=slope, [6]=offset
-
-                    # We preserve the first 5 fields exactly as they are
-                    parts[5] = f" {self.slope:.4f}"
-                    # Append newline to the last part
-                    parts[6] = f" {self.offset:.4f}\n"
-
-                    new_line = ",".join(parts)
-                    updated_lines.append(new_line)
-                    print(f"Updated config line: {new_line.strip()}")
-                else:
-                    updated_lines.append(line)
-
-            # Create a backup of the current good config
-            shutil.copy2(filename, backup_filename)
-
-            # Write to temporary file first
-            with open(temp_filename, 'w') as f:
-                f.writelines(updated_lines)
-                f.flush()
-                os.fsync(f.fileno()) # Force write to physical disk
-
-            # Atomic rename
-            os.replace(temp_filename, filename)
-            print("Successfully saved new calibration to config.txt")
-
-        except Exception as e:
-            print(f"Error saving calibration: {e}")
-            if os.path.exists(temp_filename):
-                os.remove(temp_filename)
-
-        # Push the updated config to cloud
-        self.controller.sync_to_cloud(filename, remote_filename)
-
 class CalibrationButtons:
     def __init__(self, controller):
-        self.ph = controller.ph_sensor
+        self.ph_sensor = controller.ph_sensor
         self.controller = controller
         self.btn_low = Button(25, hold_time=3)
         self.btn_high = Button(27, hold_time=3)
 
-        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low) if self.controller.maintenance_mode else None
-        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high) if self.controller.maintenance_mode else None
+        self.btn_low.when_held = self._handle_low_button
+        self.btn_high.when_held = self._handle_high_button
+
+    def _handle_low_button(self):
+        if self.controller.maintenance_mode:
+            self.ph_sensor.ph_ezo.calibrate("mid", self.controller.ph_calibrate_low)
+
+    def _handle_high_button(self):
+        if self.controller.maintenance_mode:
+            self.ph_sensor.ph_ezo.calibrate("high", self.controller.ph_calibrate_high)
 
 class MaintenanceModeButton:
     def __init__(self, controller):
         self.controller = controller
-        self.btn_maint = Button(12, pull_up=True, bounce_time=0.2, hold_time=3)
-        self.btn_maint.when_held = lambda: self.controller.set_maintenance()
-        self.btn_maint.when_released = lambda: self.controller.reset_maintenance()
+        self.btn_maint = Button(12, pull_up=True, bounce_time=0.1, hold_time=3)
+        self.btn_maint.when_held = self.controller.set_maintenance
+        self.btn_maint.when_released = self.controller.reset_maintenance
 
-class GpioCtl:
+class EzoDevice(threading.Thread):
+    def __init__(self, i2c_interface, address=0x63):
+        super().__init__()
+        # i2c_interface is the luma.core.interface.serial.i2c object
+        self.interface = i2c_interface
+        self.address = address
+        self.current_ph = 8.0
+        self.running = True
+        self.lock = threading.Lock()
+        self.daemon = True
+
+    def run(self):
+        while self.running:
+            try:
+                # Send 'R' command (Read)
+                # luma uses address as the first arg, then the data
+                self.interface.write(self.address, [ord('R'), ord('\r')])
+
+                # Wait for EZO processing
+                time.sleep(1.1)
+
+                # Read 20 bytes from the EZO
+                # luma.core uses read(address, count)
+                data = self.interface.read(self.address, 20)
+
+                # First byte is the response code (1 = Success)
+                if data[0] == 1:
+                    # Filter out the success code and null bytes
+                    char_list = [chr(x) for x in data[1:] if x != 0]
+                    ph_str = "".join(char_list).strip()
+
+                    with self.lock:
+                        self.current_ph = float(ph_str)
+                elif:
+                    print(f"PH Ezo returned bad response code: {data[0]}")
+            except Exception as e:
+                print(f"Error reading PH EZO. {e}")
+                raise
+
+            time.sleep(2) # Refresh rate
+
+    def get_ph(self):
+        with self.lock:
+            return self.current_ph
+
+    def calibrate(self, point, value):
+        """Called by PH_low and PH_high buttons when in Maintenance Mode"""
+        cmd = f"Cal,{point},{value}\r"
+        try:
+            self.interface.write(self.address, [ord(c) for c in cmd])
+            # !!!!!!!! Indicate success on OLED screen
+        except Exception as e:
+            print(f"Calibration failed with exception {e}")
+            # !!!!! INDICATE FAILURE ON OLED !!!!!!!!!
+
+        # Allow time for the hardware to write to EEPROM and for message on OLED to be seen
+        time.sleep(2)
+
+class Control:
     def __init__(self):
-        self.my_gpios = []
+        self.my_sensors = []
         self.email_text = []
         self.connected = False
         self.settings_found = []
@@ -605,13 +589,15 @@ class GpioCtl:
             '21': DigitalInputDevice(21, pull_up=True, bounce_time=0.05), # Raspberry pin 40
             '22': DigitalInputDevice(22, pull_up=True, bounce_time=0.05), # Raspberry pin 15
             '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05)  # Raspberry pin 16
-            # GPIO 24 (Raspberry pin 18) configured as output and used for an LED alarm
-            # GPIO 25 (pin 22) used for the calibration buttons
-            # GPIO 27 (pin 13) used for the calibration buttons
-            # GPIO 6  (pin 31) used for system restart
-            # GPIO 13 is used for the system LED
-            # GPIO 12 is used to enable maintenance mode which disables alarm checking
         }
+        # Port/GPIO 24 (Raspberry pin 18) configured as output and used for an LED alarm
+        # Port 25 is a BNC connector, wired to the I2C bus (addr 0x63) via PH EZO board
+        # GPIO 25 (pin 22) used for the calibration buttons
+        # GPIO 27 (pin 13) used for the calibration buttons
+        # GPIO 6  (pin 31) used for system restart
+        # GPIO 13 is used for the system LED
+        # GPIO 12 is used to enable maintenance mode which disables alarm checking
+
         self.external_led = LED(24)  # Raspberry pin 18
 
         # Analog mapping is a sequential map of port numbers to channels
@@ -636,13 +622,20 @@ class GpioCtl:
 
         print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
 
-        # Find the Ph object in the list of initialized sensors
-        self.ph_sensor = next((x for x in self.my_gpios if isinstance(x, Ph)), None)
 
-        # Initialize the calibration buttons and the Maintenance switch
+        # Initialize the maintenance mode switch
+        self.maintenance_btn = MaintenanceModeButton(self)
+
+        # Find the Ph object in the list of initialized sensors
+        self.ph_sensor = next((x for x in self.my_sensors if isinstance(x, Ph)), None)
+        # Initialize the Calibration buttons
         if self.ph_sensor:
             self.cal_btns = CalibrationButtons(self)
-        self.maintenance_btn = MaintenanceModeButton(self)
+            try:
+                # Start the PH monitor thread
+                self.ph_sensor.ph_ezo.start()
+            except Exception as e:
+                sys.exit(f"Critical Error: Could not start the PH monitor thread. {e}")
 
         # Initialize SPI Hardware
         try:
@@ -663,8 +656,8 @@ class GpioCtl:
         self.font_medium = ImageFont.truetype(font_path, 16)
 
         try:
-            serial = i2c(port=1, address=0x3C)
-            self.display = ssd1306(serial)
+            self.serial = i2c(port=1, address=0x3C)
+            self.display = ssd1306(self.serial)
         except:
             self.display = None
             print("OLED not found, continuing without display.")
@@ -698,6 +691,17 @@ class GpioCtl:
         except Exception as e:
             print(f"Hardware resource cleanup error during termination: {e}")
 
+        # Cleanup the ph_ezo
+        self.ph_sensor.ph_ezo.running = False
+        self.ph_sensor.ph_ezo.join(timeout=3)
+        if self.ph_sensor.ph_ezo.is_alive():
+            print("Warning: pH ezo thread did not exit gracefully.")
+
+        # Clear the OLED
+        if self.display:
+            self.display.clear()
+            self.display.cleanup()
+
         # Save tmp log file for later restore
         try:
             shutil.copy(self.local_phlog_path, self.saved_phlog_path)
@@ -707,8 +711,8 @@ class GpioCtl:
             print(f"Saving temp phlog to permanent area failed during termination: {e}")
 
     def load_config(self, filename):
-        with open(filename, 'r') as gpio_config:
-            for line in gpio_config:
+        with open(filename, 'r') as monitor_config:
+            for line in monitor_config:
                 # Handle configurable configuration settings
                 clean_line = line.strip()
                 if not clean_line or clean_line.startswith('#'):
@@ -724,7 +728,7 @@ class GpioCtl:
                     # Check if the prefix matches one of our known sensor types
                     for key, sensor_class in self.SENSOR_MAP.items():
                         if prefix.startswith(key):
-                            self.my_gpios.append(sensor_class(self, parts))
+                            self.my_sensors.append(sensor_class(self, parts))
                             break
 
         if self.settings_unexpected:
@@ -762,8 +766,8 @@ class GpioCtl:
         try:
             # We use --quiet to keep the logs clean during normal operation
             subprocess.run(['rclone', 'copyto', self.cloud_override_path, self.local_override_path, '--quiet'], check=True)
-            with open(self.local_override_path, 'r') as gpio_override:
-                for line in gpio_override:
+            with open(self.local_override_path, 'r') as config_override:
+                for line in config_override:
                     # Handle configurable configuration settings
                     clean_line = line.strip()
                     if not clean_line or clean_line.startswith('#'):
@@ -824,9 +828,9 @@ class GpioCtl:
         local_now = self.convert_to_local_time(utc_now)
         return local_now.strftime("%A %B %d %I:%M:%S %p")
 
-    def read_analog(self, gpio_num):
+    def read_analog(self, port_num):
         # Reads raw 0-1023 value from MCP3008 using spidev
-        port = int(gpio_num)
+        port = int(port_num)
 
         # Determine which chip and which channel (0-7)
         if port <= 8:
@@ -897,7 +901,7 @@ class GpioCtl:
                     draw.text((0, 42), line3, font=self.font_large, fill="white")
 
     def read_sensors_and_update(self):
-        for x in self.my_gpios:
+        for x in self.my_sensors:
             x.read_sensor_and_update()
 
     def send_email_alert(self):
@@ -939,8 +943,8 @@ class GpioCtl:
     def test_and_report(self):
 
         self.report_calls += 1
-        for gpio in self.my_gpios:
-            gpio_current_values = [gpio.test() for gpio in self.my_gpios]
+        for sensor in self.my_sensors:
+            sensor_current_values = [sensor.test() for sensor in self.my_sensors]
         # If there was an alarm active after this round of sampling, set the led alarm
         if self.alarm_active:
             self.set_alarm_led()
@@ -963,12 +967,12 @@ class GpioCtl:
                 status_file.write(f'Sample time: {cur_date_time}\n')
                 status_file.write(f'Monitor start time: {self.start_time_str}\n')
 
-                for gpio, current_val in zip(self.my_gpios, gpio_current_values):
-                    status_file.write(f'{gpio.read_label()}:{gpio.read_value_text(current_val)}\n')
+                for sensor, current_val in zip(self.my_sensors, sensor_current_values):
+                    status_file.write(f'{sensor.read_label()}:{sensor.read_value_text(current_val)}\n')
                     try:
-                        gpio.log(current_val)
+                        sensor.log(current_val)
                     except Exception as logerr:
-                        print(f"Exception={logerr} Error making log entry for {gpio.read_label()}!")
+                        print(f"Exception={logerr} Error making log entry for {sensor.read_label()}!")
             if self.email_text:
                 alerts = ", ".join(self.email_text)
                 clean_alerts = alerts.replace("\n", "")
@@ -998,6 +1002,7 @@ class GpioCtl:
 
     def reset_maintenance(self):
         # If the button was held for 'hold_time' seconds, we must now reset maintenance mode
+        # otherwise we assume the feed mode button was pressed, so we set feed mode.
         if self.maintenance_held:
             self.maintenance_held = False # Reset for next time
             self.maintenance_mode = False
@@ -1063,7 +1068,7 @@ def main():
     print("Starting Aquarium Monitor ...")
     wait_for_internet()
     ensure_single_instance()
-    controller = GpioCtl()
+    controller = Control()
     while True:
         try:
             controller.read_sensors_and_update()

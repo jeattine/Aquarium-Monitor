@@ -1,10 +1,10 @@
 #------------------------------------------------------------------------------------
 #Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
-#####################  a n a l o g  s e n s o r  s e c t i o n  ######################
+#####################  a n a l o g  s e n s o r  s e c t i o n  #####################
 temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
 temp,    2, 12,  Room Temp,            60-82,            10020,  0.3
-ph,      3,  4,  PH,                   7.65-8.5, -36.0390, 750.8377
+#gpioa,  3,  1,  (unused analog),      NA,               NA
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
 rflow,   6,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
@@ -16,7 +16,7 @@ hilow,   9,  1,  Sump Level,           14:20-14:00?256-768, Low, High, Ok
 #gpioa, 12,  1,  (unused analog),      NA,               NA
 #gpioa, 13,  1,  (unused analog),      NA,               NA
 #
-###################  d  i g i t a l   s e n s o r   s e c t i o n  ###################
+###################  d  i g i t a l   s e n s o r   s e c t i o n  ##################
 gpiod,  14,  2,  Return Pump,          14:20-14:00?0,    Running, Shutdown
 gpiod,  15,  4,  Overflow box,         1,                High, Ok
 gpiod,  16,  2,  Switched Power,       14:20-14:00?0,    On, Off
@@ -27,15 +27,19 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 21,  8,  (unused digital),     NA,               NA
 #gpiod, 22,  1,  (unused digital),     NA,               NA
 #gpiod, 23,  1,  (unused digital),     NA,               NA
+#gpiod, 24,  0,  (Output port for a status LED on cabinet)
+#
+####################  I 2 C   s e n s o r   s e c t i o n  ##########################
+ph,     25,  4,  PH,                   7.7-8.5
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
-#           Ports 3,4 do not have pull-up resistors. Used for PH and voltage sensing
+#           Ports 3,4 do not have pull-up resistors. Port 4 used for voltage sensing
 #           All other ports are wired with a 10K pull-up resistor
 #        2. Ports 1-13 are analog interfaces and only support analog class objects
 #        3. Ports 14-23 are digital input interfaces and support digital class objects
-#        4. Port 24 is an output port for an LED (internal 220 ohm resistor)
+#        4. Port 24 has an internal 220 ohm resistor for interfacing with an LED
 #        4. 'Nag' is the number of hours before sending another alert for
 #           a specific condition violation that has not cleared.
 #
