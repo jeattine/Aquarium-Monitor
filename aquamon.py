@@ -458,7 +458,7 @@ class EzoDevice(threading.Thread):
 
                     with self.lock:
                         self.current_ph = float(ph_str)
-                elif:
+                else:
                     print(f"PH Ezo returned bad response code: {data[0]}")
             except Exception as e:
                 print(f"Error reading PH EZO. {e}")
@@ -692,10 +692,11 @@ class Control:
             print(f"Hardware resource cleanup error during termination: {e}")
 
         # Cleanup the ph_ezo
-        self.ph_sensor.ph_ezo.running = False
-        self.ph_sensor.ph_ezo.join(timeout=3)
-        if self.ph_sensor.ph_ezo.is_alive():
-            print("Warning: pH ezo thread did not exit gracefully.")
+        if self.ph_sensor:
+            self.ph_sensor.ph_ezo.running = False
+            self.ph_sensor.ph_ezo.join(timeout=3)
+            if self.ph_sensor.ph_ezo.is_alive():
+                print("Warning: pH ezo thread did not exit gracefully.")
 
         # Clear the OLED
         if self.display:
