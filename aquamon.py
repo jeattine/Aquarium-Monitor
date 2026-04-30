@@ -30,15 +30,15 @@ from luma.oled.device import ssd1306
 from luma.core.render import canvas
 
 # --- HARDWARE I/O MAPPING ---
-# MCP3008 Chip 0: Channels 0-7 (Temp, PH, etc.)
-# MCP3008 Chip 1: Channels 8+
+# MCP3008 Chip 0: Channels 1-7 -> Ports 2-8 (unused channel 0)
+# MCP3008 Chip 1: Channels 0-4 -> Ports 9-13 (unused channels 5,6,7)
 # OLED: I2C Address 0x3C
-# PH-EZO: I2C Address 0x63 (BNC connector)
+# PH-EZO: I2C Address 0x63 (Port 1  BNC connector)
 # GPIO 6  (pin 31) used for system restart
 # GPIO 12 (pin 32) is used to enable maintenance mode
 # GPIO 13 (pin 33) is used for the system LED
 # GPIO 24 (pin 18) is used for output to remote LED status
-# GPIO 25 (pin 22) used for pH low Calibrate
+# GPIO 25 (pin 22) used for pH mid Calibrate
 # GPIO 27 (pin 13) used for pH High Calibrate
 
 class Sensor:
@@ -187,23 +187,6 @@ class FloorWetSensor(GpioDigital):
     def __init__(self, controller, config_file_data):
         super(FloorWetSensor, self).__init__(controller, config_file_data)
 
-class CO2deliverySensor(GpioDigital):
-    def __init__(self, controller, config_file_data):
-        super(CO2deliverySensor, self).__init__(controller, config_file_data)
-
-    def read_value_text(self, value):
-        # Do not require >3 samples of the same reading, i.e. ignore 'value'
-        if self.zeros_count > 0:
-            minutes_on = (self.zeros_count * self.controller.sample_time)/60
-            retval = self.config_info[5].strip() + f' {minutes_on:.0f} minutes.'
-        elif self.ones_count > 0:
-            minutes_off = (self.ones_count * self.controller.sample_time)/60
-            retval = self.config_info[6].strip() + f' {minutes_off:.0f} minutes.'
-        else:
-            return 'Not Avail'
-        percent_on = (self.zeros_total * 100) / (self.zeros_total + self.ones_total)
-        return retval + f' (overall on-time: {percent_on:.0f}%)'
-
 class TempSensor(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(TempSensor, self).__init__(controller, config_file_data)
@@ -273,14 +256,6 @@ class RandomFlowSensor(GpioAnalog):
         # Convert the sample data into a standard deviation
         return statistics.stdev(self.samples)
 
-class FlowSensorFX4(GpioAnalog):
-    def __init__(self, controller, config_file_data):
-        super(FlowSensorFX4, self).__init__(controller, config_file_data)
-
-    def read_value(self):
-        flow_volume = 1023 - self.averaged_sample
-        return flow_volume
-
 class LightSensor(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(LightSensor, self).__init__(controller, config_file_data)
@@ -331,7 +306,7 @@ class Ph(Sensor):
     def __init__(self, controller, config_file_data):
         super(Ph, self).__init__(controller, config_file_data)
         self.current_ph = 6.0
-        self.raw_low = None
+        self.raw_mid = None
         self.raw_high = None
         self.min_max_init(datetime.now())
         self.day_stamp = 0  # Force re-initialization on first sensor read after timezone is avail
@@ -421,14 +396,14 @@ class CalibrationButtons:
     def __init__(self, controller):
         self.ph_sensor = controller.ph_sensor
         self.controller = controller
-        self.btn_low = Button(25, bounce_time=0.1, hold_time=3)
+        self.btn_mid = Button(25, bounce_time=0.1, hold_time=3)
         self.btn_high = Button(27, bounce_time=0.1, hold_time=3)
 
-        self.btn_low.when_pressed = self._handle_low_pressed_button
+        self.btn_mid.when_pressed = self._handle_mid_pressed_button
         self.btn_high.when_pressed = self._handle_high_pressed_button
-        self.btn_low.when_held = self._handle_low_held_button
+        self.btn_mid.when_held = self._handle_mid_held_button
         self.btn_high.when_held = self._handle_high_held_button
-        self.btn_low.when_released = self._handle_released_button
+        self.btn_mid.when_released = self._handle_released_button
         self.btn_high.when_released = self._handle_released_button
 
     def _handle_high_pressed_button(self):
@@ -438,9 +413,9 @@ class CalibrationButtons:
             with self.controller.i2c_lock:
                 self.controller.update_display()
 
-    def _handle_low_pressed_button(self):
+    def _handle_mid_pressed_button(self):
         if self.controller.maintenance_mode:
-            controller.calibrate_text = "Cal LOW"
+            controller.calibrate_text = "Cal MID"
             controller.set_calibrate_mode()
             with self.controller.i2c_lock:
                 self.controller.update_display()
@@ -454,9 +429,9 @@ class CalibrationButtons:
             with self.controller.i2c_lock:
                 self.controller.update_display()
 
-    def _handle_low_held_button(self):
+    def _handle_mid_held_button(self):
         if self.controller.maintenance_mode:
-            if self.ph_sensor.ph_ezo.calibrate("high", self.controller.ph_calibrate_low):
+            if self.ph_sensor.ph_ezo.calibrate("mid", self.controller.ph_calibrate_mid):
                 self.controller.calibrate_text = "Success"
             else:
                 self.controller.calibrate_text = "Failed"
@@ -477,7 +452,6 @@ class MaintenanceModeButton:
 class EzoDevice(threading.Thread):
     def __init__(self, controller, address):
         super().__init__()
-        # i2c_interface is the luma.core.interface.serial.i2c object
         self.controller = controller
         self.interface = controller.serial_bus
         self.address = address
@@ -498,7 +472,6 @@ class EzoDevice(threading.Thread):
             bus = self.interface._bus
 
             # Send 'R' command (Read)
-            # luma uses address as the first arg, then the data
             with controller.i2c_lock:
                 bus.write_i2c_block_data(self.address, 0, [ord('R'), ord('\r')])
 
@@ -506,7 +479,6 @@ class EzoDevice(threading.Thread):
             time.sleep(1.1)
 
             # Read 20 bytes from the EZO
-            # luma.core uses read(address, count)
             with controller.i2c_lock:
                 data = bus.read_i2c_block_data(self.address, 0, 20)
 
@@ -528,7 +500,7 @@ class EzoDevice(threading.Thread):
             return self.current_ph
 
     def calibrate(self, point, value):
-        """Called by PH_low and PH_high buttons when in Maintenance Mode"""
+        """Called by PH_mid and PH_high buttons when in Maintenance Mode"""
         bus = self.interface._bus
         cmd = [ord(c) for c in f"Cal,{point},{value}\r"]
         try:
@@ -587,10 +559,8 @@ class Control:
             'gpiod': GpioDigital,
             'temp': TempSensor,
             'rflow': RandomFlowSensor,
-            'flow': FlowSensorFX4,
             'light': LightSensor,
             'floor': FloorWetSensor,
-            'co2': CO2deliverySensor,
             'hilow': HighLowLevel,
             'battery': Battery,
             'ph': Ph
@@ -605,7 +575,7 @@ class Control:
 
         # Configurable float settings
         self.configurable_floats = [
-            'ph_calibrate_low',
+            'ph_calibrate_mid',
             'ph_calibrate_high'
         ]
 
@@ -621,7 +591,7 @@ class Control:
 
         # Settings allowed to be overridden
         self.allowed_overrides = [
-            'ph_calibrate_low',
+            'ph_calibrate_mid',
             'ph_calibrate_high',
             'server_update_freq',
             'sample_time',
@@ -654,9 +624,9 @@ class Control:
         self.external_led = LED(24)  # Raspberry pin 18
 
         # Analog mapping is a sequential map of port numbers to channels
-        #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
+        #    Monitor port number 2-8 ->  maps to MCP3008 chip 1, channels 1-7
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
-        #    MCP3008 chip 2 channels 5-7 are currently not configured
+        #    MCP3008 chip 2 channels 5-7 and chip 1 channel 0 are currently not configured
 
         self.i2c_lock = threading.Lock()
 
@@ -1067,7 +1037,7 @@ class Control:
             self.maintenance_mode = False
             self.reset_maintenance_led()
             # reset any partial PH calibration actions
-            self.ph_sensor.raw_low = None
+            self.ph_sensor.raw_mid = None
             self.ph_sensor.raw_high = None
         else:
             self.feed_mode = True
