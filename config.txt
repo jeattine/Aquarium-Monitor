@@ -2,8 +2,7 @@
 #Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
 #####################  a n a l o g  s e n s o r  s e c t i o n  ######################
-temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
-temp,    2, 12,  Room Temp,            60-82,            10020,  0.3
+temp,    2,  2,  Water Temp,           75-82,            10020,  2.3
 ph,      3,  4,  PH,                   7.65-8.5, -36.0390, 750.8377
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
