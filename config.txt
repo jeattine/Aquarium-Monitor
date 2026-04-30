@@ -1,9 +1,10 @@
 #------------------------------------------------------------------------------------
 #Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
+####################  I 2 C   s e n s o r   s e c t i o n  ##########################
+ph,      1,  4,  PH,                   7.7-8.5
 #####################  a n a l o g  s e n s o r  s e c t i o n  #####################
-temp,    1,  2,  Water Temp,           75-82,            10020,  2.4
-temp,    2, 12,  Room Temp,            60-82,            10020,  0.3
+temp,    2,  2,  Water Temp,           75-82,            10020,  2.4
 #gpioa,  3,  1,  (unused analog),      NA,               NA
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
@@ -29,8 +30,6 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 23,  1,  (unused digital),     NA,               NA
 #gpiod, 24,  0,  (Output port for a status LED on cabinet)
 #
-####################  I 2 C   s e n s o r   s e c t i o n  ##########################
-ph,     25,  4,  PH,                   7.7-8.5
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:
