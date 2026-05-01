@@ -1,9 +1,8 @@
 #------------------------------------------------------------------------------------
 #Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
-####################  I 2 C   s e n s o r   s e c t i o n  ##########################
-ph,      1,  4,  PH,                   7.7-8.5
 #####################  a n a l o g  s e n s o r  s e c t i o n  #####################
+temp,    2,  2,  Room Temp,            60-82,            10020,  0.3
 temp,    2,  2,  Water Temp,           75-82,            10020,  2.3
 #gpioa,  3,  1,  (unused analog),      NA,               NA
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
@@ -30,17 +29,20 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 23,  1,  (unused digital),     NA,               NA
 #gpiod, 24,  0,  (Output port for a status LED on cabinet)
 #
+####################  I 2 C   s e n s o r   s e c t i o n  ##########################
+ph,      25,  4,  PH,                   7.7-8.5
 #
 #
-# Notes: 1. Port 2 is wired special for temperature sensing:
+# Notes: 1. Ports 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
-#           Ports 3,4 do not have pull-up resistors. Port 4 used for voltage sensing
-#           All other ports are wired with a 10K pull-up resistor
-#        2. Ports 1-13 are analog interfaces and only support analog class objects
-#        3. Ports 14-23 are digital input interfaces and support digital class objects
-#        4. Port 24 has an internal 220 ohm resistor for interfacing with an LED
-#        4. 'Nag' is the number of hours before sending another alert for
+#        2. Ports 3,4 do not have pull-up resistors and can be used for voltage sensing
+#        3. Ports 5-23 are wired with a 10K pull-up resistor
+#        4. Ports 2-13 are analog interfaces and only support analog class objects
+#        5. Ports 14-23 are digital input interfaces and support digital class objects
+#        6. Port 24 has an internal 220 ohm resistor wired in series for LED attach
+#        7. 'Nag' is the number of hours before sending another alert for
 #           a specific condition violation that has not cleared.
+#        8. Port 25 is an BNC connector on an Atlas Scientific EZO carrier board
 #
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
