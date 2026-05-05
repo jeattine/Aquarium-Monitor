@@ -547,18 +547,18 @@ class Ph4502(GpioAnalog):
         # Push the updated config to cloud
         self.controller.sync_to_cloud(filename, remote_filename)
 
-    def terminate_thread():
+    def terminate_thread(self):
         # Method is a no-op for this old version of Ph sensor
         pass
 
 class CalibrationButtons4502:
     def __init__(self, controller):
-        self.ph = controller.ph4502_sensor
+        self.ph = controller.ph_sensor
         self.controller = controller
-        self.btn_low = Button(25, hold_time=3)
+        self.btn_mid = Button(25, hold_time=3)
         self.btn_high = Button(27, hold_time=3)
 
-        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low) if self.controller.maintenance_mode else None
+        self.btn_mid.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_mid) if self.controller.maintenance_mode else None
         self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high) if self.controller.maintenance_mode else None
 
 
@@ -925,11 +925,11 @@ class Control:
                 elif ',' in clean_line:
                     # Handle sensor instantiations
                     parts = [p.strip() for p in clean_line.split(',')]
-                    prefix = parts[0].lower()
+                    prefix = parts[0].strip().lower()
 
                     # Check if the prefix matches one of our known sensor types
                     for key, sensor_class in self.SENSOR_MAP.items():
-                        if prefix.startswith(key):
+                        if prefix == key:
                             self.my_sensors.append(sensor_class(self, parts))
                             break
 
