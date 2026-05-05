@@ -30,10 +30,10 @@ from luma.oled.device import ssd1306
 from luma.core.render import canvas
 
 # --- HARDWARE I/O MAPPING ---
-# MCP3008 Chip 0: Channels 1-7 -> Ports 2-8 (unused channel 0)
+# MCP3008 Chip 0: Channels 0-7 -> Ports 1-8
 # MCP3008 Chip 1: Channels 0-4 -> Ports 9-13 (unused channels 5,6,7)
 # OLED: I2C Address 0x3C
-# PH-EZO: I2C Address 0x63 (Port 1  BNC connector)
+# PH-EZO: I2C Address 0x63 (Port 25  BNC connector)
 # GPIO 6  (pin 31) used for system restart
 # GPIO 12 (pin 32) is used to enable maintenance mode
 # GPIO 13 (pin 33) is used for the system LED
@@ -392,6 +392,176 @@ class Ph(Sensor):
         max_ts = self.max_timestamp.strftime("%I:%M %p")
         return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
 
+class Ph4502(GpioAnalog):
+    def __init__(self, controller, config_file_data):
+        super(Ph4502, self).__init__(controller, config_file_data)
+        # This class tracks the max and min values/timestamps and logs PH values every hour
+        self.slope = float(self.config_info[5].lstrip())
+        self.offset = float(self.config_info[6].lstrip())
+        self.samples = deque([(8.1 * self.slope + self.offset)] * 32, maxlen=32)
+        self.current_ph = 8.0
+        self.raw_low = None
+        self.raw_high = None
+        self.min_max_init(datetime.now())
+        self.day_stamp = 0  # Force re-initialization on first sensor read after timezone is avail
+        self.log_stamp = datetime.now().hour
+        log_path = self.controller.local_phlog_path
+        self.ph_logger = logging.getLogger("PhLogger")
+        self.ph_logger.setLevel(logging.INFO)
+        self.trim_amount = 4  # Trim 25% from top and bottom of sample buffer
+
+        def log_converter(*args):
+            return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.controller.timezone)).timetuple()
+
+        # Avoid adding multiple log handlers if the class is re-instantiated
+        if not self.ph_logger.handlers:
+            # Keep 5 backup files, each max 10K
+            handler = RotatingFileHandler(log_path, maxBytes=10**4, backupCount=5)
+            # Standard CSV-like format: Time,Value
+            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
+            handler.setFormatter(formatter)
+
+            handler.formatter.converter = log_converter
+            self.ph_logger.addHandler(handler)
+
+    def read_sensor_and_update(self):
+        # Use parent class logic to get the trimmed mean
+        super().read_sensor_and_update()
+        # Record PH in controller for Display Panel
+        self.controller.display_ph = self.averaged_sample
+
+        # Debug
+        #print(f"{self.samples}\n")
+
+        # Do min/max reporting daily
+        current_time = self.controller.convert_to_local_time(datetime.now())
+        current_day = current_time.day
+        if current_day != self.day_stamp:
+            # Start a new max/min period of recording
+            self.min_max_init(current_time)
+            self.day_stamp = current_time.day
+
+        # Use calibrated slope and offset to convert to PH
+        self.current_ph = (self.averaged_sample - self.offset) / self.slope
+
+        # Record PH in controller for Display Panel
+        self.controller.display_ph = self.current_ph
+
+        if self.test_active and not self.controller.maintenance_mode:
+            if self.current_ph > self.max_ph:
+                self.max_ph = self.current_ph
+                self.max_timestamp = current_time
+            if self.current_ph < self.min_ph:
+                self.min_ph = self.current_ph
+                self.min_timestamp = current_time
+
+    def read_value(self):
+        return self.current_ph
+
+    def min_max_init(self, current_time):
+        self.max_ph = 4
+        self.min_ph = 12
+        self.max_timestamp = current_time
+        self.min_timestamp = current_time
+
+    def log(self, value):
+        current_hour = datetime.now().hour
+        if current_hour != self.log_stamp:
+            # Logging library handles the timestamp and file writing
+            self.ph_logger.info(f" {value:2.2f}")
+            self.log_stamp = current_hour
+            local_file = self.controller.local_phlog_path
+            remote_file = self.controller.cloud_phlog_path
+            # Write the log file out to the cloud
+            self.controller.sync_to_cloud(local_file, remote_file)
+
+    def read_value_text(self, value):
+        # need to include the mix/max values/timestamps
+        min_ts = self.min_timestamp.strftime("%I:%M %p")
+        max_ts = self.max_timestamp.strftime("%I:%M %p")
+        return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
+
+    def calibrate(self, target):
+        # Capture the current raw value from the running average
+        raw = self.averaged_sample
+        if target == self.controller.ph_calibrate_low:
+            self.raw_low = raw
+        else:
+            self.raw_high = raw
+
+        if self.raw_low and self.raw_high:
+            self.slope = (self.raw_high - self.raw_low) /  (self.controller.ph_calibrate_high - self.controller.ph_calibrate_low)
+            self.offset = self.raw_low - self.controller.ph_calibrate_low * self.slope
+            self.save_to_config()
+            # Reset the stored calibration data to allow future re-calibration
+            self.raw_low = 0
+            self.raw_high = 0
+
+    def save_to_config(self):
+        filename = self.controller.local_config_path
+        remote_filename = self.controller.cloud_config_path
+        temp_filename = filename.with_suffix('.tmp')
+        backup_filename = filename.with_suffix('.bak')
+        updated_lines = []
+
+        try:
+            with open(filename, 'r') as f:
+                lines = f.readlines()
+
+            for line in lines:
+                # Identify the pH line (starts with 'ph')
+                if line.strip().startswith('ph,'):
+                    parts = line.split(',')
+                    # parts[0]=class, [1]=gpio, [2]=nag, [3]=label, [4]=condition
+                    # parts[5]=slope, [6]=offset
+
+                    # We preserve the first 5 fields exactly as they are
+                    parts[5] = f" {self.slope:.4f}"
+                    # Append newline to the last part
+                    parts[6] = f" {self.offset:.4f}\n"
+
+                    new_line = ",".join(parts)
+                    updated_lines.append(new_line)
+                    print(f"Updated config line: {new_line.strip()}")
+                else:
+                    updated_lines.append(line)
+
+            # Create a backup of the current good config
+            shutil.copy2(filename, backup_filename)
+
+            # Write to temporary file first
+            with open(temp_filename, 'w') as f:
+                f.writelines(updated_lines)
+                f.flush()
+                os.fsync(f.fileno()) # Force write to physical disk
+
+            # Atomic rename
+            os.replace(temp_filename, filename)
+            print("Successfully saved new calibration to config.txt")
+
+        except Exception as e:
+            print(f"Error saving calibration: {e}")
+            if os.path.exists(temp_filename):
+                os.remove(temp_filename)
+
+        # Push the updated config to cloud
+        self.controller.sync_to_cloud(filename, remote_filename)
+
+    def terminate_thread():
+        # Method is a no-op for this old version of Ph sensor
+        pass
+
+class CalibrationButtons4502:
+    def __init__(self, controller):
+        self.ph = controller.ph4502_sensor
+        self.controller = controller
+        self.btn_low = Button(25, hold_time=3)
+        self.btn_high = Button(27, hold_time=3)
+
+        self.btn_low.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_low) if self.controller.maintenance_mode else None
+        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high) if self.controller.maintenance_mode else None
+
+
 class CalibrationButtons:
     def __init__(self, controller):
         self.ph_sensor = controller.ph_sensor
@@ -563,7 +733,8 @@ class Control:
             'floor': FloorWetSensor,
             'hilow': HighLowLevel,
             'battery': Battery,
-            'ph': Ph
+            'ph': Ph,
+            'ph4502': Ph4502
         }
         # Configurable integer settings
         self.configurable_integers = [
@@ -624,9 +795,9 @@ class Control:
         self.external_led = LED(24)  # Raspberry pin 18
 
         # Analog mapping is a sequential map of port numbers to channels
-        #    Monitor port number 2-8 ->  maps to MCP3008 chip 1, channels 1-7
+        #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
-        #    MCP3008 chip 2 channels 5-7 and chip 1 channel 0 are currently not configured
+        #    MCP3008 chip 2 channels 5-7 currently not configured
 
         self.i2c_lock = threading.Lock()
 
@@ -668,6 +839,13 @@ class Control:
                 self.ph_sensor.start_thread()
             except Exception as e:
                 sys.exit(f"Critical Error: Could not start the PH monitor thread. {e}")
+
+        # If no Ph object found, attempt to find the Ph4502 object in the list of initialized sensors
+        if not self.ph_sensor:
+            self.ph_sensor = next((x for x in self.my_sensors if isinstance(x, Ph4502)), None)
+            # Initialize the Calibration buttons for the Ph4502 object
+            if self.ph_sensor:
+                self.cal_btns = CalibrationButtons4502(self)
 
         # Initialize SPI Hardware
         try:
