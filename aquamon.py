@@ -302,9 +302,9 @@ class Battery(GpioAnalog):
             return f' {self.config_info[8].strip()} ({value:2.1f})'
         return f' {self.config_info[9].strip()} ({value:2.1f})'
 
-class Ph(Sensor):
+class PhEzo(Sensor):
     def __init__(self, controller, config_file_data):
-        super(Ph, self).__init__(controller, config_file_data)
+        super(PhEzo, self).__init__(controller, config_file_data)
         self.current_ph = 6.0
         self.raw_mid = None
         self.raw_high = None
@@ -558,11 +558,18 @@ class CalibrationButtons4502:
         self.btn_mid = Button(25, hold_time=3)
         self.btn_high = Button(27, hold_time=3)
 
-        self.btn_mid.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_mid) if self.controller.maintenance_mode else None
-        self.btn_high.when_held = lambda: self.ph.calibrate(controller.ph_calibrate_high) if self.controller.maintenance_mode else None
+        self.btn_mid.when_held = self._handle_mid_held_button
+        self.btn_high.when_held = self._handle_high_held_button
 
+    def _handle_mid_held_button(self):
+        if self.controller.maintenance_mode:
+            self.ph.calibrate(controller.ph_calibrate_mid)
 
-class CalibrationButtons:
+    def _handle_high_held_button(self):
+        if self.controller.maintenance_mode:
+            self.ph.calibrate(controller.ph_calibrate_high)
+
+class CalibrationButtonsEzo:
     def __init__(self, controller):
         self.ph_sensor = controller.ph_sensor
         self.controller = controller
@@ -642,14 +649,14 @@ class EzoDevice(threading.Thread):
             bus = self.interface._bus
 
             # Send 'R' command (Read)
-            with controller.i2c_lock:
+            with self.controller.i2c_lock:
                 bus.write_i2c_block_data(self.address, 0, [ord('R'), ord('\r')])
 
             # Wait for EZO processing
             time.sleep(1.1)
 
             # Read 20 bytes from the EZO
-            with controller.i2c_lock:
+            with self.controller.i2c_lock:
                 data = bus.read_i2c_block_data(self.address, 0, 20)
 
             # First byte is the response code (1 = Success)
@@ -733,7 +740,7 @@ class Control:
             'floor': FloorWetSensor,
             'hilow': HighLowLevel,
             'battery': Battery,
-            'ph': Ph,
+            'ph': PhEzo,
             'ph4502': Ph4502
         }
         # Configurable integer settings
@@ -830,10 +837,10 @@ class Control:
         self.maintenance_btn = MaintenanceModeButton(self)
 
         # Find the Ph object in the list of initialized sensors
-        self.ph_sensor = next((x for x in self.my_sensors if isinstance(x, Ph)), None)
+        self.ph_sensor = next((x for x in self.my_sensors if isinstance(x, PhEzo)), None)
         # Initialize the Calibration buttons
         if self.ph_sensor:
-            self.cal_btns = CalibrationButtons(self)
+            self.cal_btns = CalibrationButtonsEzo(self)
             try:
                 # Start the PH monitor thread
                 self.ph_sensor.start_thread()
