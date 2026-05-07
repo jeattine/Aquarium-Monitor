@@ -123,6 +123,7 @@ class GpioAnalog(Sensor):
         # Initialize a deque with a fixed maximum length.
         # This replaces manual slicing [1:]
         self.samples = deque(range(0, 1024, 64), maxlen=16)
+        self.port = int(self.config_info[1].strip())
 
     def read_value(self):
         return self.averaged_sample
@@ -132,7 +133,7 @@ class GpioAnalog(Sensor):
 
     def read_sensor_and_update(self):
          # Simply append; the oldest value is dropped automatically
-        new_val = self.controller.read_analog(self.config_info[1].lstrip())
+        new_val = self.controller.read_analog(self.port)
         self.samples.append(new_val)
         # Create a running average. Dump (1/trim_amount) from highest/lowest samples
         if self.enable_averaging:
@@ -144,6 +145,9 @@ class GpioAnalog(Sensor):
 
             self.averaged_sample = sum(temp_samples) / len(temp_samples)
 
+    def is_port_valid(self):
+        return self.port in self.controller.analog_ports
+
 class GpioDigital(Sensor):
     def __init__(self, controller, config_file_data):
         super(GpioDigital, self).__init__(controller, config_file_data)
@@ -153,6 +157,8 @@ class GpioDigital(Sensor):
         self.ones_total = 0
         self.zeros_total = 0
         self.previous_state = 0
+        self.port = self.config_info[1].strip()
+
 
     def read_value(self):
         return self.snapshot
@@ -165,7 +171,7 @@ class GpioDigital(Sensor):
         return 'Not Avail'
 
     def read_sensor_and_update(self):
-        count = self.controller.read_digital(self.config_info[1].lstrip())
+        count = self.controller.read_digital(self.port)
         if count == 1:
             if self.previous_state == 0:
                 self.previous_state = 1
@@ -182,6 +188,9 @@ class GpioDigital(Sensor):
             self.snapshot = 1
         elif self.zeros_count > 3:
             self.snapshot = 0
+
+    def is_port_valid(self):
+        return int(self.port) in self.controller.digital_ports
 
 class FloorWetSensor(GpioDigital):
     def __init__(self, controller, config_file_data):
@@ -283,8 +292,11 @@ class Battery(GpioAnalog):
         super(Battery, self).__init__(controller, config_file_data)
         # initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
-        self.config_info5_float = float(self.config_info[5].strip())
-        self.config_info7_float = float(self.config_info[7].strip())
+        self.good_fair_threshold = float(self.config_info[5].strip())
+        self.fair_bad_threshold = float(self.config_info[7].strip())
+        self.good_text = self.config_info[6].strip()
+        self.fair_text = self.config_info[8].strip()
+        self.bad_text = self.config_info[9].strip()
 
     def read_value(self):
         # ---------------------------------------------------------------------------
@@ -296,11 +308,11 @@ class Battery(GpioAnalog):
         return voltage
 
     def read_value_text(self, value):
-        if value > self.config_info5_float:
-            return f' {self.config_info[6].strip()} ({value:2.1f})'
-        elif value > self.config_info7_float:
-            return f' {self.config_info[8].strip()} ({value:2.1f})'
-        return f' {self.config_info[9].strip()} ({value:2.1f})'
+        if value > self.good_fair_threshold:
+            return f' {self.good_text} ({value:2.1f})'
+        elif value > self.fair_bad_threshold:
+            return f' {self.fair_text} ({value:2.1f})'
+        return f' {self.bad_text} ({value:2.1f})'
 
 class PhEzo(Sensor):
     def __init__(self, controller, config_file_data):
@@ -314,6 +326,8 @@ class PhEzo(Sensor):
         log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
+        self.port = int(self.config_info[1].strip())
+
 
         try:
             self.ph_ezo = EzoDevice(controller, address=0x63)
@@ -391,6 +405,9 @@ class PhEzo(Sensor):
         min_ts = self.min_timestamp.strftime("%I:%M %p")
         max_ts = self.max_timestamp.strftime("%I:%M %p")
         return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
+
+    def is_port_valid(self):
+        return self.port in self.controller.i2c_ports
 
 class Ph4502(GpioAnalog):
     def __init__(self, controller, config_file_data):
@@ -805,6 +822,9 @@ class Control:
         #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
         #    MCP3008 chip 2 channels 5-7 currently not configured
+        self.analog_ports = list(range(1, 14))
+        self.digital_ports = list(range(14, 24))
+        self.i2c_ports = [25]
 
         self.i2c_lock = threading.Lock()
 
@@ -932,19 +952,25 @@ class Control:
                 elif ',' in clean_line:
                     # Handle sensor instantiations
                     parts = [p.strip() for p in clean_line.split(',')]
-                    prefix = parts[0].strip().lower()
+                    sensor_type = parts[0].strip().lower()
 
-                    # Check if the prefix matches one of our known sensor types
+                    # Check if sensor_type matches one of our known sensor types
                     for key, sensor_class in self.SENSOR_MAP.items():
-                        if prefix == key:
+                        if sensor_type == key:
                             self.my_sensors.append(sensor_class(self, parts))
                             break
 
         if self.settings_unexpected:
             print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")
         self.settings_missing = list(set(self.configurable_settings) - set(self.settings_found))
+
         if self.settings_missing:
             sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
+
+        # Check that ports specified in config file are valid for the type of sensor
+        for sensor in self.my_sensors:
+            if not sensor.is_port_valid():
+                sys.exit(f'Configuration error. The specified port ({sensor.config_info[1]}) is not valid for the sensor labeled "{sensor.config_info[3]}"')
 
         # See if a valid timezone was specified. Expecting a valid IANA name
         valid_zones = available_timezones()
