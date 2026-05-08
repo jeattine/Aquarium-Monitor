@@ -28,6 +28,7 @@ from luma.core.interface.serial import i2c
 from PIL import ImageFont
 from luma.oled.device import ssd1306
 from luma.core.render import canvas
+from smbus2 import SMBus, i2c_msg
 
 # --- HARDWARE I/O MAPPING ---
 # MCP3008 Chip 0: Channels 0-7 -> Ports 1-8
@@ -602,15 +603,15 @@ class CalibrationButtonsEzo:
 
     def _handle_high_pressed_button(self):
         if self.controller.maintenance_mode:
-            controller.calibrate_text = "Cal HIGH"
-            controller.set_calibrate_mode()
+            self.controller.calibrate_text = "Cal HIGH"
+            self.controller.set_calibrate_mode()
             with self.controller.i2c_lock:
                 self.controller.update_display()
 
     def _handle_mid_pressed_button(self):
         if self.controller.maintenance_mode:
-            controller.calibrate_text = "Cal MID"
-            controller.set_calibrate_mode()
+            self.controller.calibrate_text = "Cal MID"
+            self.controller.set_calibrate_mode()
             with self.controller.i2c_lock:
                 self.controller.update_display()
 
@@ -634,7 +635,7 @@ class CalibrationButtonsEzo:
 
     def _handle_released_button(self):
         if self.controller.maintenance_mode:
-            controller.reset_calibrate_mode()
+            self.controller.reset_calibrate_mode()
 
 class MaintenanceModeButton:
     def __init__(self, controller):
@@ -647,12 +648,13 @@ class EzoDevice(threading.Thread):
     def __init__(self, controller, address):
         super().__init__()
         self.controller = controller
-        self.interface = controller.serial_bus
         self.address = address
         self.current_ph = 8.0
         self.running = True
         self.lock = threading.Lock()
         self.daemon = True
+        self.bus = SMBus(1)
+        self.address = 0x63
 
     def run(self):
         while self.running:
@@ -662,19 +664,21 @@ class EzoDevice(threading.Thread):
 
     def poll(self):
         try:
-            # Access the underlying smbus object inside luma
-            bus = self.interface._bus
 
             # Send 'R' command (Read)
             with self.controller.i2c_lock:
-                bus.write_i2c_block_data(self.address, 0, [ord('R'), ord('\r')])
+                write = i2c_msg.write(self.address, [ord('R')])
+                self.bus.i2c_rdwr(write)
 
             # Wait for EZO processing
             time.sleep(1.1)
 
             # Read 20 bytes from the EZO
             with self.controller.i2c_lock:
-                data = bus.read_i2c_block_data(self.address, 0, 20)
+                read = i2c_msg.read(self.address, 20)
+                self.bus.i2c_rdwr(read)
+            data = list(read)
+            # debug: print(f"Data from PHEZO: {data}")
 
             # First byte is the response code (1 = Success)
             if data[0] == 1:
@@ -694,18 +698,29 @@ class EzoDevice(threading.Thread):
             return self.current_ph
 
     def calibrate(self, point, value):
-        """Called by PH_mid and PH_high buttons when in Maintenance Mode"""
-        bus = self.interface._bus
-        cmd = [ord(c) for c in f"Cal,{point},{value}\r"]
+        command_str = f"Cal,{point},{value}"
+        # Convert string to list of ASCII bytes
+        command_bytes = [ord(char) for char in command_str]
         try:
-            with controller.i2c_lock:
-                bus.write_i2c_block_data(self.address, 0, cmd)
+            with self.controller.i2c_lock:
+                write = i2c_msg.write(self.address, command_bytes)
+                self.bus.i2c_rdwr(write)
         except Exception as e:
             print(f"Calibration failed with exception {e}")
             return False
         # Allow time for the hardware to write to EEPROM
-        time.sleep(1.3)
-        return True
+        time.sleep(1.2)
+        # Read the response to ensure it worked
+        with self.controller.i2c_lock:
+            read = i2c_msg.read(self.address, 1)
+            self.bus.i2c_rdwr(read)
+            response  = list(read)
+        # return 1 if it worked, 0 if it failed
+        if response[0] == 1:
+            return True
+        print(f"Calibration failed with a return code of {response[0]}")
+        # 2:Syntax 3, 254:Still Processing, 255:No Data
+        return False
 
 class Control:
     def __init__(self):
@@ -835,8 +850,8 @@ class Control:
         signal.signal(signal.SIGTERM, self.handle_shutdown)
 
         try:
-            self.serial_bus = i2c(port=1, address=0x3C)
-            self.display = ssd1306(self.serial_bus)
+            self.serial = i2c(port=1, address=0x3C)
+            self.display = ssd1306(self.serial)
         except:
             self.display = None
             print("OLED not found, continuing without display.")

@@ -4,7 +4,7 @@
 #####################  a n a l o g  s e n s o r  s e c t i o n  #####################
 temp,    1,  2,  Room Temp,            60-82,            10020,  0.3
 temp,    2,  2,  Water Temp,           75-82,            10020,  2.3
-ph4502,  3,  4,  PH,                   7.65-8.5,         -36.0390, 750.8377
+#ph4502, 3,  0,  (unused),             7.65-8.5,        -36.0390, 750.8377
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
 rflow,   6,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
@@ -30,19 +30,20 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 24,  0,  (Output port for a status LED on cabinet)
 #
 ####################  I 2 C   s e n s o r   s e c t i o n  ##########################
-#ph,      25,  4, PH,                   7.7-8.5
+ph,      25,  4, PH,                   7.8-8.5
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
 #        2. Ports 3,4 do not have pull-up resistors and can be used for voltage sensing
-#        3. Ports 5-23 are wired with a 10K pull-up resistor
-#        4. Ports 2-13 are analog interfaces and only support analog class objects
-#        5. Ports 14-23 are digital input interfaces and support digital class objects
-#        6. Port 24 has an internal 220 ohm resistor wired in series for LED attach
-#        7. 'Nag' is the number of hours before sending another alert for
+#        3. Port 3 has a low-pass filter for use with ph 4502c probe interface
+#        4. Ports 5-23 are wired with a 10K pull-up resistor
+#        5. Ports 2-13 are analog interfaces and only support analog class objects
+#        6. Ports 14-23 are digital input interfaces and support digital class objects
+#        7. Port 24 has an internal 220 ohm resistor wired in series for LED attach
+#        8. 'Nag' is the number of hours before sending another alert for
 #           a specific condition violation that has not cleared.
-#        8. Port 25 is an BNC connector on an Atlas Scientific EZO carrier board
+#        9. Port 25 I2C with a BNC socket on an Atlas Sci carrier board and PH EZO board
 #
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
