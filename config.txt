@@ -2,7 +2,6 @@
 #Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
 #####################  a n a l o g  s e n s o r  s e c t i o n  ######################
-temp,    1,  2,  Room Temp,            60-82,            10020,  0.3
 temp,    2,  2,  Water Temp,           75-82,            10020,  2.3
 ph,      3,  4,  PH,                   7.65-8.5, -36.0390, 750.8377
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
@@ -16,7 +15,7 @@ hilow,   9,  1,  Sump Level,           14:20-14:00?256-768, Low, High, Ok
 #gpioa, 12,  1,  (unused analog),      NA,               NA
 #gpioa, 13,  1,  (unused analog),      NA,               NA
 #
-###################  d  i g i t a l   s e n s o r   s e c t i o n  ###################
+###################  d  i g i t a l   s e n s o r   s e c t i o n  ##################
 gpiod,  14,  2,  Return Pump,          14:20-14:00?0,    Running, Shutdown
 gpiod,  15,  4,  Overflow box,         1,                High, Ok
 gpiod,  16,  2,  Switched Power,       14:20-14:00?0,    On, Off
@@ -27,17 +26,23 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 21,  8,  (unused digital),     NA,               NA
 #gpiod, 22,  1,  (unused digital),     NA,               NA
 #gpiod, 23,  1,  (unused digital),     NA,               NA
+#gpiod, 24,  0,  (Output port for a status LED on cabinet)
+#
+####################  I 2 C   s e n s o r   s e c t i o n  ##########################
+ph,      25,  4, PH,                   7.8-8.5
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
-#           Ports 3,4 do not have pull-up resistors. Used for PH and voltage sensing
-#           All other ports are wired with a 10K pull-up resistor
-#        2. Ports 1-13 are analog interfaces and only support analog class objects
-#        3. Ports 14-23 are digital input interfaces and support digital class objects
-#        4. Port 24 is an output port for an LED (internal 220 ohm resistor)
-#        4. 'Nag' is the number of hours before sending another alert for
+#        2. Ports 3,4 do not have pull-up resistors and can be used for voltage sensing
+#        3. Port 3 has a low-pass filter for use with ph 4502c probe interface
+#        4. Ports 5-23 are wired with a 10K pull-up resistor
+#        5. Ports 2-13 are analog interfaces and only support analog class objects
+#        6. Ports 14-23 are digital input interfaces and support digital class objects
+#        7. Port 24 has an internal 220 ohm resistor wired in series for LED attach
+#        8. 'Nag' is the number of hours before sending another alert for
 #           a specific condition violation that has not cleared.
+#        9. Port 25 I2C with a BNC socket on an Atlas Sci carrier board and PH EZO board
 #
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
@@ -48,8 +53,8 @@ server_update_freq=60
 sample_time=2
 # PH high calibration solution at 25 C
 ph_calibrate_high=9.18
-# PH low calibration solution at 25 C
-ph_calibrate_low=6.87
+# PH mid calibration solution at 25 C
+ph_calibrate_mid=6.87
 # Active maintenance mode warning timeout in minutes
 maintenance_timeout=30
 # Feed mode timeout in minutes
