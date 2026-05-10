@@ -843,6 +843,8 @@ class Control:
         #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
         #    Monitor port number 9-13 -> maps to MCP3008 chip 2, channels 0-4
         #    MCP3008 chip 2 channels 5-7 currently not configured
+
+        # Port Type Groupings
         self.analog_ports = list(range(1, 14))
         self.digital_ports = list(range(14, 24))
         self.i2c_ports = [25]
@@ -990,13 +992,19 @@ class Control:
 
         # 1. Check that ports specified in config file are valid for the type of sensor
         # 2. Check that the same port was not specified twice
+        # 3. Check that no more than 1 PH sensor is configured (Calibration GPIO limitation)
         port_list = list()
+        ph_sensor_port = None
         for sensor in self.my_sensors:
             if not sensor.is_port_valid():
                 sys.exit(f'Configuration error. The specified port ({sensor.config_info[1]}) is not valid for the sensor labeled "{sensor.config_info[3]}"')
             if sensor.config_info[1] in port_list:
                 sys.exit(f"Configuration error. The specified port ({sensor.config_info[1]}) was previously assigned to a sensor.")
             port_list.append(sensor.config_info[1])
+            if isinstance(sensor, PhEzo) or isinstance(sensor, Ph4502):
+                if ph_sensor_port is not None:
+                    sys.exit(f"Configuration error. Muliple PH sensors configured. Ports:{ph_sensor_port} and {sensor.config_info[1]}.")
+                ph_sensor_port = sensor.config_info[1]
 
         # See if a valid timezone was specified. Expecting a valid IANA name
         valid_zones = available_timezones()
