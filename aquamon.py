@@ -715,11 +715,17 @@ class EzoDevice(threading.Thread):
             read = i2c_msg.read(self.address, 1)
             self.bus.i2c_rdwr(read)
             response  = list(read)
-        # return 1 if it worked, 0 if it failed
+        # return 1 if it worked
         if response[0] == 1:
             return True
-        print(f"Calibration failed with a return code of {response[0]}")
-        # 2:Syntax 3, 254:Still Processing, 255:No Data
+        elif response[0] == 2:
+            print(f"Calibration failed: Syntax error ({response[0]})")
+        elif response[0] == 254:
+            print(f"Calibration failed: Still Processing ({response[0]})")
+        elif response[0] == 255:
+            print(f"Calibration failed: No Data ({response[0]})")
+        else:
+            print(f"Calibration failed: response code {response[0]}")
         return False
 
 class Control:
@@ -982,10 +988,15 @@ class Control:
         if self.settings_missing:
             sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
 
-        # Check that ports specified in config file are valid for the type of sensor
+        # 1. Check that ports specified in config file are valid for the type of sensor
+        # 2. Check that the same port was not specified twice
+        port_list = list()
         for sensor in self.my_sensors:
             if not sensor.is_port_valid():
                 sys.exit(f'Configuration error. The specified port ({sensor.config_info[1]}) is not valid for the sensor labeled "{sensor.config_info[3]}"')
+            if sensor.config_info[1] in port_list:
+                sys.exit(f"Configuration error. The specified port ({sensor.config_info[1]}) was previously assigned to a sensor.")
+            port_list.append(sensor.config_info[1])
 
         # See if a valid timezone was specified. Expecting a valid IANA name
         valid_zones = available_timezones()
@@ -1269,6 +1280,8 @@ class Control:
             self.feed_mode = True
             self.set_feed_led()
             self.feed_start = datetime.now()
+            feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
+            self.feed_seconds = int(feed_time_remaining.total_seconds())
 
     def reset_feed_mode(self):
         self.feed_mode = False
