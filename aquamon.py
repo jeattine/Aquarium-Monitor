@@ -1285,11 +1285,11 @@ class Control:
             self.ph_sensor.raw_mid = None
             self.ph_sensor.raw_high = None
         else:
-            self.feed_mode = True
-            self.set_feed_led()
             self.feed_start = datetime.now()
             feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
             self.feed_seconds = int(feed_time_remaining.total_seconds())
+            self.feed_mode = True
+            self.set_feed_led()
 
     def reset_feed_mode(self):
         self.feed_mode = False
