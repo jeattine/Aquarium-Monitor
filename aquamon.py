@@ -354,8 +354,7 @@ class Ph(Sensor):
 
     def terminate_thread(self):
         self.ph_ezo.running = False
-        print(f"Waiting for ph_ezo thread to terminate. Timeout= {self.poll_frequency} seconds...")
-        self.ph_ezo.join(timeout=self.poll_frequency)
+        self.ph_ezo.join(timeout=1)
         if self.ph_ezo.is_alive():
             print("Warning: pH ezo thread did not exit gracefully.")
         else:
@@ -485,7 +484,9 @@ class EzoDevice(threading.Thread):
         while self.running:
             if not self.controller.calibrate_mode:
                 self.poll()
-            time.sleep(2 if self.controller.maintenance_mode else self.sensor.poll_frequency)
+            sleep_time = (2 if self.controller.maintenance_mode else self.sensor.poll_frequency)
+            if self.controller.stop_event.wait(sleep_time):
+                break
 
     def poll(self):
         try:
@@ -752,6 +753,9 @@ class Control:
         self.stop_event.set()
 
     def cleanup(self):
+        # stop event may not have been called yet in certain exit flows.
+        self.stop_event.set()
+
         # Clean up hardware resources
         try:
             if hasattr(self, 'spi0'):
