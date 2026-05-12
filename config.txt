@@ -30,7 +30,7 @@ gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
 #gpiod, 24,  0,  (Output port for a status LED on cabinet)
 #
 ####################  I 2 C   s e n s o r   s e c t i o n  ##########################
-ph,     25,  2, PH,                   7.8-8.5
+ph,     25,  2, PH,                   7.8-8.5,           30
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:

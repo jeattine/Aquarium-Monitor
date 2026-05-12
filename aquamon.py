@@ -328,10 +328,10 @@ class Ph(Sensor):
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
         self.port = int(self.config_info[1].strip())
-
+        self.poll_frequency = int(self.config_info[5].strip())
 
         try:
-            self.ph_ezo = EzoDevice(controller, address=0x63)
+            self.ph_ezo = EzoDevice(controller, self, address=0x63)
         except Exception as e:
             sys.exit(f"Could not create PH monitor thread object. {e}")
 
@@ -354,7 +354,8 @@ class Ph(Sensor):
 
     def terminate_thread(self):
         self.ph_ezo.running = False
-        self.ph_ezo.join(timeout=3)
+        print(f"Waiting for ph_ezo thread to terminate. Timeout= {self.poll_frequency} seconds...")
+        self.ph_ezo.join(timeout=self.poll_frequency)
         if self.ph_ezo.is_alive():
             print("Warning: pH ezo thread did not exit gracefully.")
         else:
@@ -468,7 +469,7 @@ class MaintenanceModeButton:
         self.btn_maint.when_released = self.controller.reset_maintenance
 
 class EzoDevice(threading.Thread):
-    def __init__(self, controller, address):
+    def __init__(self, controller, sensor, address):
         super().__init__()
         self.controller = controller
         self.address = address
@@ -478,12 +479,13 @@ class EzoDevice(threading.Thread):
         self.daemon = True
         self.bus = SMBus(1)
         self.address = 0x63
+        self.sensor = sensor
 
     def run(self):
         while self.running:
             if not self.controller.calibrate_mode:
                 self.poll()
-            time.sleep(2)
+            time.sleep(2 if self.controller.maintenance_mode else self.sensor.poll_frequency)
 
     def poll(self):
         try:
