@@ -36,7 +36,7 @@ ph,     25,  2, PH,                   7.8-8.5,           30
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:
 #           GND --'internal 10K pad resistor'--'EXTERNAL THERMISTOR'-- GPIO input
 #        2. Ports 3,4 do not have pull-up resistors and can be used for voltage sensing
-#        3. Port 3 has a low-pass filter for use with ph 4502c probe interface
+#        3. Port 3 has a low-pass filter for additional noise reduction
 #        4. Ports 5-23 are wired with a 10K pull-up resistor
 #        5. Ports 2-13 are analog interfaces and only support analog class objects
 #        6. Ports 14-23 are digital input interfaces and support digital class objects
