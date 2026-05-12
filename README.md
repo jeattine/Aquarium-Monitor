@@ -29,15 +29,32 @@ Internal wiring schematic:
 ![Schematic](./images/schematic.png)
 
 The following images show the various sensors that feed the monitor through the RCA ports:
-
-
+  
+***
 ![Flow Detection](./images/FlowDetect.png)
+  
+***
 ![Hi Low Level Detection](./images/HiLowDetect.png)
+  
+***
 ![Random Flow Detect](./images/RandomFlowDetect.png)
+  
+***
 ![Misc Detect](./images/VariousDetect.png)
+  
+***
 ![Conditional and Temp Detect](./images/ConditionalTempDetect.png)
+  
+***
 ![Battery Condition](./images/BatteryCondition.png)
+  
+***
 ![Filter Roller](./images/Filterroller.png)
+  
+***
+![PH](./images/PhEZO.png)
+***
+
 
 ## Raspberry Pi Setup for the Aquarium Monitor
 
