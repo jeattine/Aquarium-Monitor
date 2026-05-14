@@ -116,14 +116,14 @@ mkdir reef_monitor && cd reef_monitor
 
 ### Create and activate a Virtual Environment
 
-```
+```shell
 python -m venv env
 source env/bin/activate
 ```
 
 ### Install the necessary python libraries
 
-```
+```shell
 pip install gpiozero spidev luma.oled smbus2 rpi-lgpio
 ```
 
@@ -131,7 +131,7 @@ pip install gpiozero spidev luma.oled smbus2 rpi-lgpio
 
 The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are disabled by default.  
 1.  In the SSH terminal:
-    ```
+    ```shell
 	sudo raspi-config
 	```
 1.  Navigate to **Interface Options**.
@@ -141,7 +141,7 @@ The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are
 
 Since we are on Windows, the easiest way to move your .py and config.txt files to the Pi is using **SCP** (Secure Copy). Open a _new_ PowerShell window on your Windows desktop (not the one logged into the Pi) and run:  
 
-```
+```shell
 scp aquarium_script.py config.txt pi@aquamon.local:~/reef_monitor/
 ```
 
@@ -149,21 +149,21 @@ scp aquarium_script.py config.txt pi@aquamon.local:~/reef_monitor/
 
 The code uses os.environ.get('AQUAMON\_EMAIL'), etc. We need to define these on the Pi so the script can see them.  
 1.  In your SSH session, open the profile file:
-    ````
+    ````shell
     nano ~/.bashrc
 	````
 2.  Scroll to the bottom and add the following:
-    ````
+    ````text
     export AQUAMON_EMAIL=[your_email@gmail.com](mailto:your_email@gmail.com)  
     export AQUAMON_EMAIL_PW="your_app_password"
 	````
 3.  Source the script:
-    ````
+    ````text
     source ~/reef_monitor/env/bin/activate
 	````
 4.  Save (**Ctrl+O, Enter**) and Exit (**Ctrl+X**).
 5.  Refresh the variables:
-    ``` 
+    ```shell 
     source ~/.bashrc
 	```
 
@@ -171,18 +171,18 @@ The code uses os.environ.get('AQUAMON\_EMAIL'), etc. We need to define these on 
 
 To test it: 
 
-``` 
+```shell 
 python reef_monitor/aquarium_script.py
 ```
 ### Setup a systemd service to have it start on boot
 
 In the SSH session, run the following command to create a new service file:
 
-```
+```shell
 sudo nano /etc/systemd/system/reef_monitor.service
 ```
 Service file:  
-```
+```text
 [Unit]  
 Description=Reef Aquarium Monitor Script  
 After=network-online.target  
@@ -209,16 +209,16 @@ WantedBy=multi-user.target
 Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. 
 
 You must then enable the service. This creates a symlink (a shortcut) that tells the system to run this script when it reaches multi-user.target (normal bootup).  
-```
+```shell
 sudo systemctl enable reef_monitor.service  
 ```
 I also have a reef shutdown service that runs separately to provide restart and shutdown via buttons. This would done as a separate service so that if the monitor ends or is hung, the restart and shutdown button actions would still be active.
 
-```
+```shell
 sudo nano /etc/systemd/system/reef_shutdown.service  
 ```
 
-```
+```text
 [Unit]  
 Description=Reef Monitor Hardware Shutdown Button  
 After=network.target
@@ -235,7 +235,7 @@ WantedBy=multi-user.target
 ```
 
 Also enable this service:
-```
+```shell
 sudo systemctl enable shutdown.service  
 ```
 
@@ -251,11 +251,11 @@ The command rclone copy is **one-way only**. It behaves like an "upload" or a "d
 
 ### Setup aliases
 
-```
+```shell
 nano ~/.bash_aliases  
 ```
 
-```
+```text
 alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef_monitor/aquamon.py && echo "aquam>  
 alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef_monitor/config.txt && echo "config>  
 alias monitor-logs='TZ="America/Chicago" journalctl -u reef_monitor.service --no-pager -n 40'  
