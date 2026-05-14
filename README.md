@@ -256,9 +256,9 @@ nano ~/.bash_aliases
 ```
 
 ```text
-alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef_monitor/aquamon.py && echo "aquam>  
-alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef_monitor/config.txt && echo "config>  
-alias monitor-logs='TZ="America/Chicago" journalctl -u reef_monitor.service --no-pager -n 40'  
+alias update-aquamon='rclone copyto dropbox:GitHub/Aquarium-Monitor/aquamon.py ~/reef_monitor/aquamon.py && echo "aquamon.py updated from local repo"'
+alias update-config='rclone copyto dropbox:GitHub/Aquarium-Monitor/config.txt ~/reef_monitor/config.txt && echo "config.txt updated from local repo"'
+alias monitor-logs='TZ="America/Chicago" journalctl -u reef_monitor.service --no-pager -n 40'
 ```
 
 The update-\* aliases make code testing convenient. SSH to the system from your device, and assuming your device has dropbox access to the local repository directory, run the scripts to update the code and configuration files as needed.
