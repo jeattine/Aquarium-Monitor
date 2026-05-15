@@ -7,7 +7,7 @@ temp,    2,  2,  Water Temp,           75-82,            10020,  2.3
 #gpioa,  3,  0,  (unused analog),      NA,               NA
 battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
 light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
-rflow,   6,  1,  Water Movers,         14:20-14:00?10-500, NA, NA
+rflow,   6,  1,  Wave Makers,          14:20-14:00?10-500, NA, NA
 hilow,   7,  1,  Water level,          14:20-14:00?256-768, Low, High, Ok
 light,   8,  2,  Main Light,           09:10-20:00?500-1023+21:40-07:30?0-500
 hilow,   9,  1,  Sump Level,           14:20-14:00?256-768, Low, High, Ok

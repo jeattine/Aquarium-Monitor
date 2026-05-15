@@ -903,9 +903,11 @@ class Control:
                 text=True
             )
         except Exception as e:
-            print(f'Error testing for override file. Exception: {e}')
+            print(f'Error testing for {remote_path}. Exception: {e}')
             result = []
-        return "override.txt" in result.stdout.strip()
+        # extract the file_name portion of the remote path specification
+        file_name = remote_path.rsplit('/', 1)[-1]
+        return file_name in result.stdout.strip()
 
     def convert_to_local_time(self, utc_time):
         local_tz = ZoneInfo(self.timezone)
