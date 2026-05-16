@@ -40,10 +40,19 @@ The following images show the various sensors that feed the monitor through the 
 ![Random Flow Detect](./images/RandomFlowDetect.png)
   
 ***
-![Misc Detect](./images/VariousDetect.png)
+![Overflow Detect](./images/Overflow.png)
   
 ***
-![Conditional and Temp Detect](./images/ConditionalTempDetect.png)
+![Light Detect](./images/Lights.png)
+  
+***
+![Floor Wet Detect](./images/FloorWet.png)
+  
+***
+![Conditional Detect](./images/Conditional.png)
+  
+***
+![Temperature Detect](./images/Temperature.png)
   
 ***
 ![Battery Condition](./images/BatteryCondition.png)
