@@ -197,7 +197,8 @@ Description=Reef Aquarium Monitor Script
 After=network-online.target  
 Wants=network-online.target  
 
-[Service]  
+[Service]
+Type=notify  
 User=aquamon  
 # Add Environment variable here  
 Environment="AQUAMON_EMAIL=aquamonemail@gmail.com"  
@@ -207,15 +208,16 @@ ExecStart=/home/aquamon/reef_monitor/env/bin/python3 -u /home/aquamon/reef_monit
 # Working directory (helps if your script loads fonts or images from its own folder)  
 WorkingDirectory=/home/aquamon/reef_monitor  
 # Restart logic  
-Restart=on-failure  
+Restart=always  
 # Wait 10 seconds before restarting to prevent rapid-fire loops  
-RestartSec=10s  
+RestartSec=10s
+WatchdogSec=180  
 
 [Install]  
 WantedBy=multi-user.target  
 ```
 
-Notice that I used Restart=on-failure. This is convenient for allowing on-going development and debug work. If the monitor exits with a 0 return code or if it is externally terminated by a signal, the service will not restart automatically. Only when the monitor ends abnormally will the service restart the monitor. During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. 
+During developement/debug I would typically stop the service and run the the monitor in an ssh'ed terminal session. 
 
 You must then enable the service. This creates a symlink (a shortcut) that tells the system to run this script when it reaches multi-user.target (normal bootup).  
 ```shell
