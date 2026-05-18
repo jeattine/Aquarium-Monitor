@@ -421,8 +421,8 @@ class CalibrationButtons:
         self.btn_high.when_pressed = self._handle_high_pressed_button
         self.btn_mid.when_held = self._handle_mid_held_button
         self.btn_high.when_held = self._handle_high_held_button
-        self.btn_mid.when_released = self._handle_released_button
-        self.btn_high.when_released = self._handle_released_button
+        self.btn_mid.when_released = self._handle_mid_released_button
+        self.btn_high.when_released = self._handle_high_released_button
 
     def _handle_high_pressed_button(self):
         if self.controller.maintenance_mode:
@@ -456,8 +456,19 @@ class CalibrationButtons:
             with self.controller.i2c_lock:
                 self.controller.update_display()
 
-    def _handle_released_button(self):
+    def _handle_mid_released_button(self):
         if self.controller.maintenance_mode:
+            self.controller.reset_calibrate_mode()
+
+    def _handle_high_released_button(self):
+        if self.controller.maintenance_mode:
+            result_str = self.ph_sensor.ph_ezo.probe_health()
+            if result_str is not None:
+                result_list = result_str.split(",")
+                self.controller.calibrate_text = f"{result_list[2]}%, {result_list[3]}"
+                with self.controller.i2c_lock:
+                    self.controller.update_display()
+                time.sleep(4)
             self.controller.reset_calibrate_mode()
 
 class MaintenanceModeButton:
@@ -531,16 +542,16 @@ class EzoDevice(threading.Thread):
             with self.controller.i2c_lock:
                 write = i2c_msg.write(self.address, command_bytes)
                 self.bus.i2c_rdwr(write)
+            # Allow time for the hardware to write to EEPROM
+            time.sleep(1.2)
+            # Read the response to ensure it worked
+            with self.controller.i2c_lock:
+                read = i2c_msg.read(self.address, 1)
+                self.bus.i2c_rdwr(read)
+                response  = list(read)
         except Exception as e:
             print(f"Calibration failed with exception {e}")
             return False
-        # Allow time for the hardware to write to EEPROM
-        time.sleep(1.2)
-        # Read the response to ensure it worked
-        with self.controller.i2c_lock:
-            read = i2c_msg.read(self.address, 1)
-            self.bus.i2c_rdwr(read)
-            response  = list(read)
         # return 1 if it worked
         if response[0] == 1:
             return True
@@ -553,6 +564,32 @@ class EzoDevice(threading.Thread):
         else:
             print(f"Calibration failed: response code {response[0]}")
         return False
+
+    def probe_health(self):
+        command_str = "Slope,?"
+        # Convert string to list of ASCII bytes
+        command_bytes = [ord(char) for char in command_str]
+        try:
+            with self.controller.i2c_lock:
+                write = i2c_msg.write(self.address, command_bytes)
+                self.bus.i2c_rdwr(write)
+            time.sleep(0.5)
+            # Read the response to ensure it worked
+            with self.controller.i2c_lock:
+                read = i2c_msg.read(self.address, 25)
+                self.bus.i2c_rdwr(read)
+                response  = list(read)
+        except Exception as e:
+            print(f"{command_str} to PHEZO failed with exception {e}")
+            return None
+        if response[0] == 1:
+            # Filter out the success code and null bytes
+            char_list = [chr(x) for x in response[1:] if x != 0]
+            result_str = "".join(char_list).strip()
+            return result_str
+        else:
+            print(f"Reading pH probe slope failed: response code {response[0]}")
+            return None
 
 class Control:
     def __init__(self):
@@ -731,7 +768,7 @@ class Control:
         font_path = "/usr/share/fonts/truetype/freefont/FreeSans.ttf"
         self.font_small = ImageFont.truetype(font_path, 12)
         self.font_large = ImageFont.truetype(font_path, 26)
-        self.font_medium = ImageFont.truetype(font_path, 16)
+        self.font_medium = ImageFont.truetype(font_path, 18)
 
 
         # Initialize starting timeout for maintenance active warning emails
@@ -978,7 +1015,7 @@ class Control:
                 elif self.calibrate_mode:
                     line2 = self.calibrate_text
                     line3 = f"PH:   {self.display_ph:.2f}"
-                    draw.text((0, 20), line2, font=self.font_large, fill="white")
+                    draw.text((0, 20), line2, font=self.font_medium, fill="white")
                     draw.text((0, 42), line3, font=self.font_large, fill="white")
                 elif self.maintenance_mode:
                     line2 = "Maintenance"
@@ -988,7 +1025,7 @@ class Control:
                 elif self.feed_mode:
                     line2 = "Feed Mode"
                     minutes, seconds = divmod(self.feed_seconds, 60)
-                    line3 = f"Countdown: {minutes:02d}:{seconds:02d}"
+                    line3 = f"Timer: {minutes:02d}:{seconds:02d}"
                     draw.text((0, 20), line2, font=self.font_large, fill="white")
                     draw.text((0, 42), line3, font=self.font_medium, fill="white")
                 else:
