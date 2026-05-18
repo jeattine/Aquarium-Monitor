@@ -16,6 +16,7 @@ import spidev
 import signal
 import threading
 import traceback
+import sdnotify
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from datetime import timedelta, datetime
@@ -626,6 +627,9 @@ class Control:
         self.calibrate_text = None
         self.calibrate_mode = False
 
+        # Create the watchdog notifier
+        self.notifier = sdnotify.SystemdNotifier()
+
         # List of required environment variables
         required_vars = {
             'me': 'AQUAMON_EMAIL',
@@ -1095,6 +1099,7 @@ class Control:
 
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
+            self.notifier.notify("WATCHDOG=1")
             cur_date_time = self.get_local_timestamp()
             status_file_path = self.local_status_path
             with status_file_path.open('w') as status_file:
@@ -1120,7 +1125,18 @@ class Control:
 
         try:
             # We use --quiet to keep the logs clean during normal operation
-            subprocess.run(['rclone', 'copyto', local_file, remote_dest, '--quiet'], check=True)
+            subprocess.run(
+                [
+                    'rclone', 'copyto',
+                    local_file,
+                    remote_dest,
+                    '--quiet',
+                    '--contimeout', '20s',
+                    '--timeout', '30s',
+                    '--low-level-retries', '3'
+                ],
+                capture_output= True,
+                check=True)
             # print("Cloud sync successful.") # Uncomment for debugging
         except subprocess.CalledProcessError as e:
             # Internet likely down if we reach here.
@@ -1211,6 +1227,7 @@ def main():
     wait_for_internet()
     ensure_single_instance()
     controller = Control()
+    controller.notifier.notify("READY=1")
     while True:
         try:
             controller.read_sensors_and_update()
