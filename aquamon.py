@@ -49,9 +49,11 @@ class Sensor:
         self.config_info = config_file_data
         # Initialize very old time
         self.last_sent_alert = datetime.now() - timedelta(days=365)
-        self.nag_level = int(self.config_info[2].lstrip())
         self.test_active = False
         self.port = self.config_info[1].strip()
+        self.nag_level = int(self.config_info[2].strip())
+        self.label = self.config_info[3].strip()
+        self.conditions = self.config_info[4].strip().split('+')
 
     def read_value(self):
         # Needs to be implemented in the derived classes
@@ -65,8 +67,7 @@ class Sensor:
         self.test_active = True
         if self.controller.maintenance_mode or self.controller.feed_mode:
             return current_value
-        conditions = self.config_info[4].lstrip().split('+')
-        for condition in conditions:
+        for condition in self.conditions:
             if ':' in condition:
                 time_value = condition.split('?')
                 timespan = time_value[0].split('-')
@@ -88,7 +89,7 @@ class Sensor:
                 if current_value < float(value_low) or current_value > float(value_high):
                     # Set flag that an alarm is active during this round of sampling
                     self.controller.alarm_active = True
-                    self.controller.alarm_text = self.config_info[3].strip()
+                    self.controller.alarm_text = self.label
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
                     if (self.last_sent_alert + timedelta(hours=self.nag_level)) < datetime.now():
@@ -110,7 +111,7 @@ class Sensor:
             return now >= start or now <= end
 
     def read_label(self):
-        return self.config_info[3].lstrip()
+        return self.label
 
     def log(self, value):
         # Let the derived classes optionally maintain a log.
@@ -159,6 +160,8 @@ class GpioDigital(Sensor):
         self.ones_total = 0
         self.zeros_total = 0
         self.previous_state = 0
+        self.value_zero_text = self.config_info[5].strip()
+        self.value_one_text = self.config_info[6].strip()
 
 
     def read_value(self):
@@ -166,9 +169,9 @@ class GpioDigital(Sensor):
 
     def read_value_text(self, value):
         if value == 0:
-            return self.config_info[5].strip()
+            return self.value_zero_text
         elif value == 1:
-            return self.config_info[6].strip()
+            return self.value_one_text
         return 'Not Avail'
 
     def read_sensor_and_update(self):
@@ -204,9 +207,11 @@ class TempSensor(GpioAnalog):
         self.ema_value = None
         self.alpha = 0.2  # Smoothing factor
         self.samples = deque([500] * 16, maxlen=16)
+        self.pad_resistor = float(self.config_info[5].strip())
+        self.calibration = float(self.config_info[6].lstrip())
 
         # Check if this instance is the primary water sensor
-        self.is_water_sensor = "Water" in self.config_info[3].strip()
+        self.is_water_sensor = "Water" in self.label
 
     def read_sensor_and_update(self):
         # Get trimmed mean from parent (GpioAnalog)
@@ -223,13 +228,12 @@ class TempSensor(GpioAnalog):
             self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
 
         # Calculate Resistance
-        pad_resistor = float(self.config_info[5].strip())
         if self.ema_value <= 0:
             self.current_temp = 0
             return
 
         # Vout = Vin * (R_pad / (R_therm + R_pad)) -> Solving for R_therm:
-        resistance = ((1024 * pad_resistor / self.ema_value) - pad_resistor)
+        resistance = ((1024 * self.pad_resistor / self.ema_value) - self.pad_resistor)
 
         # Steinhart-Hart Equation
         try:
@@ -243,8 +247,7 @@ class TempSensor(GpioAnalog):
             temp_f = (temp_c * 9.0) / 5.0 + 32.0
 
             # Adjust with calibration offset from config
-            calibration = float(self.config_info[6].lstrip())
-            self.current_temp = temp_f + calibration
+            self.current_temp = temp_f + self.calibration
 
             # Update Controller's display variable
             if self.is_water_sensor:
@@ -277,16 +280,19 @@ class LightSensor(GpioAnalog):
 class HighLowLevel(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(HighLowLevel, self).__init__(controller, config_file_data)
+        self.high_value_text = self.config_info[5].strip()
+        self.low_value_text = self.config_info[6].strip()
+        self.mid_value_text = self.config_info[7].strip()
 
     def read_value(self):
         level = self.averaged_sample
         return level
     def read_value_text(self, value):
         if value > 768.0:
-            return self.config_info[5].strip()
+            return self.high_value_text
         elif value < 256.0:
-            return self.config_info[6].strip()
-        return self.config_info[7].strip()
+            return self.low_value_text
+        return self.mid_value_text
 
 class Battery(GpioAnalog):
     def __init__(self, controller, config_file_data):
@@ -613,17 +619,17 @@ class Control:
         self.maintenance_held = False
         self.maintenance_released = None
         self.maintenance_email_sent = False
-        self.local_config_path = Path(__file__).parent / 'config.txt'
-        self.local_status_path = Path('/tmp/current.txt')
-        self.local_override_path = Path('/tmp/override.txt')
-        self.local_phlog_path = Path('/tmp/phlog.txt')
-        self.saved_phlog_path = Path(Path(__file__).parent / 'logs/phlog.txt')
         self.cloud_status_path = None
         self.cloud_config_path = None
         self.cloud_phlog_path = None
         self.ph_sensor = None
         self.calibrate_text = None
         self.calibrate_mode = False
+        self.local_config_path = Path(__file__).parent / 'config.txt'
+        self.local_status_path = Path('/tmp/current.txt')
+        self.local_override_path = Path('/tmp/override.txt')
+        self.local_phlog_path = Path('/tmp/phlog.txt')
+        self.saved_phlog_path = Path(Path(__file__).parent / 'logs/phlog.txt')
 
         # Create the watchdog notifier
         self.notifier = sdnotify.SystemdNotifier()
@@ -857,14 +863,14 @@ class Control:
         ph_sensor_port = None
         for sensor in self.my_sensors:
             if not sensor.is_port_valid():
-                sys.exit(f'Configuration error. The specified port ({sensor.config_info[1]}) is not valid for the sensor labeled "{sensor.config_info[3]}"')
-            if sensor.config_info[1] in port_list:
-                sys.exit(f"Configuration error. The specified port ({sensor.config_info[1]}) was previously assigned to a sensor.")
-            port_list.append(sensor.config_info[1])
+                sys.exit(f'Configuration error. The specified port ({sensor.port}) is not valid for the sensor labeled "{sensor.label}"')
+            if sensor.port in port_list:
+                sys.exit(f"Configuration error. The specified port ({sensor.port}) was previously assigned to a sensor.")
+            port_list.append(sensor.port)
             if isinstance(sensor, Ph):
                 if ph_sensor_port is not None:
-                    sys.exit(f"Configuration error. Muliple PH sensors configured. Ports:{ph_sensor_port} and {sensor.config_info[1]}.")
-                ph_sensor_port = sensor.config_info[1]
+                    sys.exit(f"Configuration error. Muliple PH sensors configured. Ports:{ph_sensor_port} and {sensor.port}.")
+                ph_sensor_port = sensor.port
 
         # See if a valid timezone was specified. Expecting a valid IANA name
         valid_zones = available_timezones()
