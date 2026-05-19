@@ -51,6 +51,7 @@ class Sensor:
         self.last_sent_alert = datetime.now() - timedelta(days=365)
         self.nag_level = int(self.config_info[2].lstrip())
         self.test_active = False
+        self.port = self.config_info[1].strip()
 
     def read_value(self):
         # Needs to be implemented in the derived classes
@@ -125,7 +126,6 @@ class GpioAnalog(Sensor):
         # Initialize a deque with a fixed maximum length.
         # This replaces manual slicing [1:]
         self.samples = deque(range(0, 1024, 64), maxlen=16)
-        self.port = int(self.config_info[1].strip())
 
     def read_value(self):
         return self.averaged_sample
@@ -135,7 +135,7 @@ class GpioAnalog(Sensor):
 
     def read_sensor_and_update(self):
          # Simply append; the oldest value is dropped automatically
-        new_val = self.controller.read_analog(self.port)
+        new_val = self.controller.read_analog(int(self.port))
         self.samples.append(new_val)
         # Create a running average. Dump (1/trim_amount) from highest/lowest samples
         if self.enable_averaging:
@@ -148,7 +148,7 @@ class GpioAnalog(Sensor):
             self.averaged_sample = sum(temp_samples) / len(temp_samples)
 
     def is_port_valid(self):
-        return self.port in self.controller.analog_ports
+        return int(self.port) in self.controller.analog_ports
 
 class GpioDigital(Sensor):
     def __init__(self, controller, config_file_data):
@@ -159,7 +159,6 @@ class GpioDigital(Sensor):
         self.ones_total = 0
         self.zeros_total = 0
         self.previous_state = 0
-        self.port = self.config_info[1].strip()
 
 
     def read_value(self):
@@ -328,7 +327,6 @@ class Ph(Sensor):
         log_path = self.controller.local_phlog_path
         self.ph_logger = logging.getLogger("PhLogger")
         self.ph_logger.setLevel(logging.INFO)
-        self.port = int(self.config_info[1].strip())
         self.poll_frequency = int(self.config_info[5].strip())
 
         try:
@@ -409,7 +407,7 @@ class Ph(Sensor):
         return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
 
     def is_port_valid(self):
-        return self.port in self.controller.i2c_ports
+        return int(self.port) in self.controller.i2c_ports
 
 class CalibrationButtons:
     def __init__(self, controller):
