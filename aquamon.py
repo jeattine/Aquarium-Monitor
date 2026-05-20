@@ -488,7 +488,7 @@ class EzoDevice(threading.Thread):
         self.controller = controller
         self.address = address
         self.current_ph = 8.0
-        self.running = True
+        self.running = False
         self.lock = threading.Lock()
         self.daemon = True
         self.bus = SMBus(1)
@@ -496,6 +496,7 @@ class EzoDevice(threading.Thread):
         self.sensor = sensor
 
     def run(self):
+        self.running = True
         while self.running:
             if not self.controller.calibrate_mode:
                 self.poll()
