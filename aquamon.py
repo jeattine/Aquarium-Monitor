@@ -163,7 +163,6 @@ class GpioDigital(Sensor):
         self.value_zero_text = self.config_info[5].strip()
         self.value_one_text = self.config_info[6].strip()
 
-
     def read_value(self):
         return self.snapshot
 
@@ -745,7 +744,6 @@ class Control:
 
         print(f"Alerts will be sent to the following recipients: {self.email_recipients}")
 
-
         # Initialize the maintenance mode switch
         self.maintenance_btn = MaintenanceModeButton(self)
 
@@ -777,7 +775,6 @@ class Control:
         self.font_small = ImageFont.truetype(font_path, 12)
         self.font_large = ImageFont.truetype(font_path, 26)
         self.font_medium = ImageFont.truetype(font_path, 18)
-
 
         # Initialize starting timeout for maintenance active warning emails
         self.maintenance_delta = self.maintenance_timeout
@@ -1083,7 +1080,6 @@ class Control:
         self.email_text[:] = []
 
     def test_and_report(self):
-
         self.report_calls += 1
         for sensor in self.my_sensors:
             sensor_current_values = [sensor.test() for sensor in self.my_sensors]
@@ -1125,8 +1121,6 @@ class Control:
             self.sync_to_cloud(self.local_status_path, self.cloud_status_path)
 
     def sync_to_cloud(self, local_file, remote_dest):
-        """Uploads status to cloud using the rclone API"""
-
         try:
             # We use --quiet to keep the logs clean during normal operation
             subprocess.run(
