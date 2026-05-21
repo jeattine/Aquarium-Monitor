@@ -160,8 +160,8 @@ class GpioDigital(Sensor):
         self.ones_total = 0
         self.zeros_total = 0
         self.previous_state = 0
-        self.value_zero_text = self.config_info[5].strip()
-        self.value_one_text = self.config_info[6].strip()
+        self.value_zero_text = " " + self.config_info[5].strip()
+        self.value_one_text = " " + self.config_info[6].strip()
 
     def read_value(self):
         return self.snapshot
@@ -315,10 +315,10 @@ class Battery(GpioAnalog):
 
     def read_value_text(self, value):
         if value > self.good_fair_threshold:
-            return f' {self.good_text} ({value:2.1f})'
+            return f" {self.good_text} ({value:2.1f})"
         elif value > self.fair_bad_threshold:
-            return f' {self.fair_text} ({value:2.1f})'
-        return f' {self.bad_text} ({value:2.1f})'
+            return f" {self.fair_text} ({value:2.1f})"
+        return f" {self.bad_text} ({value:2.1f})"
 
 class Ph(Sensor):
     def __init__(self, controller, config_file_data):
@@ -409,7 +409,7 @@ class Ph(Sensor):
         # need to include the mix/max values/timestamps
         min_ts = self.min_timestamp.strftime("%I:%M %p")
         max_ts = self.max_timestamp.strftime("%I:%M %p")
-        return f'{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}'
+        return f"{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}"
 
     def is_port_valid(self):
         return int(self.port) in self.controller.i2c_ports
@@ -490,7 +490,6 @@ class EzoDevice(threading.Thread):
         self.current_ph = 8.0
         self.running = False
         self.lock = threading.Lock()
-        self.daemon = True
         self.bus = SMBus(1)
         self.address = 0x63
         self.sensor = sensor
@@ -921,13 +920,13 @@ class Control:
             try:
                 value_int = int(value.strip())
             except Exception as error:
-                sys.exit(f'Specified value for {key.strip()} must be an integer!')
+                sys.exit(f"Specified value for {key.strip()} must be an integer!")
             setattr(self, key.strip(), value_int)
         elif key.strip() in self.configurable_floats:
             try:
                 value_float = float(value.strip())
             except Exception as error:
-                sys.exit(f'Specified value for {key.strip()} must be a floating point number!')
+                sys.exit(f"Specified value for {key.strip()} must be a floating point number!")
             setattr(self, key.strip(), value_float)
         else:
             setattr(self, key.strip(), value.strip())
@@ -946,7 +945,7 @@ class Control:
                 text=True
             )
         except Exception as e:
-            print(f'Error testing for {remote_path}. Exception: {e}')
+            print(f"Error testing for {remote_path}. Exception: {e}")
             result = []
         # extract the file_name portion of the remote path specification
         file_name = remote_path.rsplit('/', 1)[-1]
@@ -1104,11 +1103,11 @@ class Control:
             cur_date_time = self.get_local_timestamp()
             status_file_path = self.local_status_path
             with status_file_path.open('w') as status_file:
-                status_file.write(f'Sample time: {cur_date_time}\n')
-                status_file.write(f'Monitor start time: {self.start_time_str}\n')
+                status_file.write(f"Sample time: {cur_date_time}\n")
+                status_file.write(f"Monitor start time: {self.start_time_str}\n")
 
                 for sensor, current_val in zip(self.my_sensors, sensor_current_values):
-                    status_file.write(f'{sensor.read_label()}:{sensor.read_value_text(current_val)}\n')
+                    status_file.write(f"{sensor.read_label()}:{sensor.read_value_text(current_val)}\n")
                     try:
                         sensor.log(current_val)
                     except Exception as logerr:
