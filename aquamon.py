@@ -279,9 +279,9 @@ class LightSensor(GpioAnalog):
 class HighLowLevel(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(HighLowLevel, self).__init__(controller, config_file_data)
-        self.high_value_text = self.config_info[5].strip()
-        self.low_value_text = self.config_info[6].strip()
-        self.mid_value_text = self.config_info[7].strip()
+        self.high_value_text = " " + self.config_info[5].strip()
+        self.low_value_text = " " + self.config_info[6].strip()
+        self.mid_value_text = " " + self.config_info[7].strip()
 
     def read_value(self):
         level = self.averaged_sample
