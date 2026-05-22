@@ -108,10 +108,7 @@ Modern Raspberry Pi OS (Bookworm) requires a **Virtual Environment (venv)** to p
 
 ```
 sudo apt update sudo apt upgrade -y  
-sudo apt install python3-dev -y  
-sudo apt install i2c-tools -y  
-sudo apt install rclone  
-sudo apt install swig liblgpio-dev python3-dev build-essential -y  
+sudo apt install i2c-tools rclone swig liblgpio-dev python3-dev build-essential -y  
 sudo apt-get install fonts-freefont-ttf  
 curl -fsSL https://tailscale.com/install.sh | sh  
 sudo tailscale up  
