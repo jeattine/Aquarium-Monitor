@@ -71,7 +71,7 @@ cloud_path=ReefMonitor
 # Time zone for status and reports (standard IANA Time Zone name)
 timezone=America/Chicago
 # Comma separated list of email recipients
-email_recipients=john.attinella@gmail.com
+email_recipients=xxxxxxxxx@gmail.com
 
 #--------------------------------------------------------------------------------
 #  Required Environment Variables
