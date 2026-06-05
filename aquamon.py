@@ -1112,6 +1112,8 @@ class Control:
                         sensor.log(current_val)
                     except Exception as logerr:
                         print(f"Exception={logerr} Error making log entry for {sensor.read_label()}!")
+                status_file.write(f"Alert email list: {self.email_recipients}\n")
+
             if self.email_text:
                 alerts = ", ".join(self.email_text)
                 clean_alerts = alerts.replace("\n", "")
