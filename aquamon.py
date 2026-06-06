@@ -279,19 +279,19 @@ class LightSensor(GpioAnalog):
 class HighLowLevel(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(HighLowLevel, self).__init__(controller, config_file_data)
-        self.high_value_text = " " + self.config_info[5].strip()
-        self.low_value_text = " " + self.config_info[6].strip()
-        self.mid_value_text = " " + self.config_info[7].strip()
+        self.low_level_text = " " + self.config_info[5].strip()
+        self.mid_level_text = " " + self.config_info[6].strip()
+        self.high_level_text = " " + self.config_info[7].strip()
 
     def read_value(self):
         level = self.averaged_sample
         return level
     def read_value_text(self, value):
         if value > 768.0:
-            return self.high_value_text
+            return self.low_level_text
         elif value < 256.0:
-            return self.low_value_text
-        return self.mid_value_text
+            return self.high_level_text
+        return self.mid_level_text
 
 class Battery(GpioAnalog):
     def __init__(self, controller, config_file_data):
@@ -646,7 +646,7 @@ class Control:
             'rflow': RandomFlowSensor,
             'light': LightSensor,
             'floor': FloorWetSensor,
-            'hilow': HighLowLevel,
+            'highlow': HighLowLevel,
             'battery': Battery,
             'ph': Ph
         }
