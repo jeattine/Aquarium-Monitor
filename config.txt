@@ -1,36 +1,36 @@
 #------------------------------------------------------------------------------------
 #Class, Port, Nag, Label,             Condition,        Class specific parms
 #------------------------------------------------------------------------------------
-#####################  a n a l o g  s e n s o r  s e c t i o n  ######################
-temp,    1,  8,  Room Temp,            60-82,            10020, 0.3
-temp,    2,  2,  Water Temp,           75-82,            10020,  2.3
-#gpioa,  3,  0,  (unused analog),      NA,               NA
-battery, 4, 24,  Battery,              13.2-15.0,        13.2, Good, 12.9, Fair, Poor
-light,   5,  8,  Scrubber Light,       21:15-09:45?200-1023+10:15-20:45?0-300
-rflow,   6,  1,  Wave Makers,          14:20-14:00?10-500, NA, NA
-highlow, 7,  1,  Water level,          14:20-14:00?256-768, Low, Ok, High
-light,   8,  2,  Main Light,           09:10-20:00?500-1023+21:40-07:30?0-500
-highlow,  9,  1,  Sump Level,           14:20-14:00?256-768, Low, Ok, High
-#gpioa, 10,  0,  (unused analog),      NA,               NA
-#gpioa, 11,  0,  (unused analog),      NA,               NA
-#gpioa, 12,  0,  (unused analog),      NA,               NA
-#gpioa, 13,  0,  (unused analog),      NA,               NA
+#####################  a n a l o g  s e n s o r  s e c t i o n  ####################
+temp,    1,  8,  Room Temp,           60-82,            10020, 0.3
+temp,    2,  2,  Water Temp,          75-82,            10020,  2.3
+#gpioa,  3,  0,  (unused analog),     NA,               NA
+battery, 4, 24,  Battery,             13.2-15.0,        13.2, Good, 12.9, Fair, Poor
+light,   5,  8,  Scrubber Light,      21:15-09:45?200-1023+10:15-20:45?0-300
+rflow,   6,  1,  Wave Makers,         14:20-14:00?10-500, NA, NA
+highlow, 7,  1,  Water level,         14:20-14:00?256-768, Low, Ok, High
+light,   8,  2,  Main Light,          09:10-20:00?500-1023+21:40-07:30?0-500
+highlow, 9,  1,  Sump Level,          14:20-14:00?256-768, Low, Ok, High
+#gpioa, 10,  0,  (unused analog),     NA,               NA
+#gpioa, 11,  0,  (unused analog),     NA,               NA
+#gpioa, 12,  0,  (unused analog),     NA,               NA
+#gpioa, 13,  0,  (unused analog),     NA,               NA
 #
-###################  d  i g i t a l   s e n s o r   s e c t i o n  ##################
-gpiod,  14,  1,  Return Pump,          14:20-14:00?0,    Running, Shutdown
-gpiod,  15,  4,  Overflow box,         1,                High, Ok
-gpiod,  16,  1,  Switched Power,       14:20-14:00?0,    On, Off
-gpiod,  17,  4,  Protein Skimmer,      1,                Full, Ok
-gpiod,  18,  4,  Top-off reservoir,    0,                Ok,  Low
-floor,  19,  1,  Floor,                1,                Wet, Dry
-gpiod,  20,  8,  Filter Roller,        1,                Low, Ok
-#gpiod, 21,  0,  (unused digital),     NA,               NA
-#gpiod, 22,  0,  (unused digital),     NA,               NA
-#gpiod, 23,  0,  (unused digital),     NA,               NA
+###################  d  i g i t a l   s e n s o r   s e c t i o n  #################
+gpiod,  14,  1,  Return Pump,         14:20-14:00?0,    Running, Shutdown
+gpiod,  15,  4,  Overflow box,        1,                High, Ok
+gpiod,  16,  1,  Switched Power,      14:20-14:00?0,    On, Off
+gpiod,  17,  4,  Protein Skimmer,     1,                Full, Ok
+gpiod,  18,  4,  Top-off reservoir,   0,                Ok,  Low
+floor,  19,  1,  Floor,               1,                Wet, Dry
+gpiod,  20,  8,  Filter Roller,       1,                Low, Ok
+#gpiod, 21,  0,  (unused digital),    NA,               NA
+#gpiod, 22,  0,  (unused digital),    NA,               NA
+#gpiod, 23,  0,  (unused digital),    NA,               NA
 #gpiod, 24,  0,  (Output port for a status LED on cabinet)
 #
-####################  I 2 C   s e n s o r   s e c t i o n  ##########################
-ph,     25,  2, PH,                   7.8-8.5,           30
+####################  I 2 C   s e n s o r   s e c t i o n  #########################
+ph,     25,  2, PH,                  7.8-8.5,           30
 #
 #
 # Notes: 1. Ports 1,2 are wired special for temperature sensing:

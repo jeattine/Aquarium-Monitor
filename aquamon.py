@@ -344,8 +344,8 @@ class Ph(Sensor):
 
         # Avoid adding multiple log handlers if the class is re-instantiated
         if not self.ph_logger.handlers:
-            # Keep 5 backup files, each max 10K
-            handler = RotatingFileHandler(log_path, maxBytes=10**4, backupCount=5)
+            # Keep 1 backup file, each max 100K
+            handler = RotatingFileHandler(log_path, maxBytes=100**4, backupCount=1)
             # Standard CSV-like format: Time,Value
             formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
             handler.setFormatter(formatter)
