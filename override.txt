@@ -1,11 +1,14 @@
 #
 # Override file for modifying the base configuration file at startup
 #
-# Any of the following settings can be modified:
+# Will be read from cloud folder: ReefMonitor
 #
-#ph_calibrate_low=
+# Un-comment desired entries and provide the requested value
+#
+#email_recipients=
+#ph_calibrate_mid=
 #ph_calibrate_high=
 #server_update_freq=
 #sample_time=
-#email_recipients=
-#
+#maintenance_timeout=
+#feed_timeout=
