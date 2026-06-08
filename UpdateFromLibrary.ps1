@@ -7,8 +7,8 @@ $destinationFolder2 = "C:\Users\johna\Dropbox\ReefMonitor\"
 
 # Define the prompt message and choices
 $title   = "File Staging Confirmation"
-$message1 = "Copy aquamon.py from GitHub\Aquarium-Monitor\ to ReefMonitor\"
-$message2 = "Copy config.txt from GitHub\Aquarium-Monitor\ to ReefMonitor\"
+$message1 = "Copy ${sourceFile1} to ${destinationFolder1}"
+$message2 = "Copy ${sourceFile2} to ${destinationFolder2}"
 
 $choices = [System.Management.Automation.Host.ChoiceDescription[]] @(
     New-Object System.Management.Automation.Host.ChoiceDescription "&Yes", "Copies the file to the destination."
@@ -32,7 +32,7 @@ if ($decision -eq 0) {
         Copy-Item -Path $sourceFile1 -Destination $destinationFolder1 -Force
         Write-Host "File successfully copied!" -ForegroundColor Green
     } else {
-        Write-Warning "Source file not found at: $sourceFile1"
+        Write-Warning "Source file not found at: ${sourceFile1}"
     }
 }
  else {
@@ -55,7 +55,7 @@ if ($decision -eq 0) {
         Copy-Item -Path $sourceFile2 -Destination $destinationFolder2 -Force
         Write-Host "File successfully copied!" -ForegroundColor Green
     } else {
-        Write-Warning "Source file not found at: $sourceFile2"
+        Write-Warning "Source file not found at: ${sourceFile2}"
     }
 }
  else {
