@@ -51,7 +51,8 @@ class Sensor:
         self.last_sent_alert = datetime.now() - timedelta(days=365)
         self.test_active = False
         self.port = self.config_info[1].strip()
-        self.nag_level = int(self.config_info[2].strip())
+        self.nag_level = float(self.config_info[2].strip())
+        self.alarm_count = 0
         self.label = self.config_info[3].strip()
         self.conditions = self.config_info[4].strip().split('+')
 
@@ -97,6 +98,12 @@ class Sensor:
                         self.last_sent_alert = datetime.now()
                         # force a server update prior to sending the alarm
                         self.controller.report_calls = self.controller.server_update_freq / self.controller.sample_time
+                        self.alarm_count = self.alarm_count + 1
+                        if self.alarm_count == 2:
+                            # Second alarm was sent with original nag interval. Reduce the interval
+                            self.nag_level = self.nag_level/2
+                elif self.alarm_count:
+                    self.alarm_count = 0
 
         return current_value
 
@@ -276,9 +283,9 @@ class LightSensor(GpioAnalog):
         light_level = 1023 - self.averaged_sample
         return light_level
 
-class HighLowLevel(GpioAnalog):
+class ThreeState(GpioAnalog):
     def __init__(self, controller, config_file_data):
-        super(HighLowLevel, self).__init__(controller, config_file_data)
+        super(ThreeState, self).__init__(controller, config_file_data)
         self.low_level_text = " " + self.config_info[5].strip()
         self.mid_level_text = " " + self.config_info[6].strip()
         self.high_level_text = " " + self.config_info[7].strip()
@@ -287,11 +294,36 @@ class HighLowLevel(GpioAnalog):
         level = self.averaged_sample
         return level
     def read_value_text(self, value):
+        # Baesd on 10K resistor across upper sensor
         if value > 768.0:
             return self.low_level_text
         elif value < 256.0:
             return self.high_level_text
         return self.mid_level_text
+
+class FourState(GpioAnalog):
+    def __init__(self, controller, config_file_data):
+        super(FourState, self).__init__(controller, config_file_data)
+        self.level1_text = " " + self.config_info[5].strip()
+        self.level2_text = " " + self.config_info[6].strip()
+        self.level3_text = " " + self.config_info[7].strip()
+        self.level4_text = " " + self.config_info[8].strip()
+
+    def read_value(self):
+        level = self.averaged_sample
+        return level
+    def read_value_text(self, value):
+        # Based on resistor of:
+        #   5K across upper sensor
+        #   15K across middle sensor
+        #   none across lower sensor
+        if value > 854.0:
+            return self.level4_text
+        elif value > 512.0:
+            return self.level3_text
+        elif value > 172.0:
+            return self.level2_text
+        return self.level1_text
 
 class Battery(GpioAnalog):
     def __init__(self, controller, config_file_data):
@@ -646,7 +678,8 @@ class Control:
             'rflow': RandomFlowSensor,
             'light': LightSensor,
             'floor': FloorWetSensor,
-            'highlow': HighLowLevel,
+            '3state': ThreeState,
+            '4state' : FourState,
             'battery': Battery,
             'ph': Ph
         }
