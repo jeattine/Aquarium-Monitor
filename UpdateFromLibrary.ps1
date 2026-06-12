@@ -1,7 +1,9 @@
 # Define source and destination paths
-$sourceFile1 = "C:\Users\johna\Dropbox\GitHub\Aquarium-Monitor\aquamon.py"
+$file1 = "aquamon.py"
+$sourceFile1 = "C:\Users\johna\Dropbox\GitHub\Aquarium-Monitor\${file1}"
 $destinationFolder1 = "C:\Users\johna\Dropbox\ReefMonitor\"
-$sourceFile2 = "C:\Users\johna\Dropbox\GitHub\Aquarium-Monitor\config.txt"
+$file2 = "config.txt"
+$sourceFile2 = "C:\Users\johna\Dropbox\GitHub\Aquarium-Monitor\${file2}"
 $destinationFolder2 = "C:\Users\johna\Dropbox\ReefMonitor\"
 
 
@@ -36,7 +38,7 @@ if ($decision -eq 0) {
     }
 }
  else {
-    Write-Host "Skip staging of aquamon.py" -ForegroundColor Yellow
+    Write-Host "Skip staging of ${file1}" -ForegroundColor Yellow
 }
 
 $decision = $Host.UI.PromptForChoice($title, $message2, $choices, 0)
@@ -54,11 +56,23 @@ if ($decision -eq 0) {
         }
         Copy-Item -Path $sourceFile2 -Destination $destinationFolder2 -Force
         Write-Host "File successfully copied!" -ForegroundColor Green
+		$new_name = Read-Host "Enter your email address for sending alerts"
+		Write-Host "You entered: ${new_gmail_name}"
+		$content = Get-Content "${destinationFolder2}${file2}" -Raw
+		# Detect original line ending
+		$lineEnding = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
+		# Replace text
+		$content = $content -replace 'email_recipients=', "email_recipients=${new_name}"
+		# Normalize back to original line ending
+		$content = $content -replace "`r`n|`n", $lineEnding
+		# Write back
+		[System.IO.File]::WriteAllText("${destinationFolder2}${file2}", $content)
+		Write-Host "email name updated successfully"
     } else {
         Write-Warning "Source file not found at: ${sourceFile2}"
     }
 }
  else {
-    Write-Host "Skip staging of config.txt" -ForegroundColor Yellow
+    Write-Host "Skip staging of ${file2}" -ForegroundColor Yellow
 }
 
