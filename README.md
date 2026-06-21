@@ -137,7 +137,7 @@ pip install gpiozero spidev luma.oled smbus2 rpi-lgpio sdnotify
 
 ### Enable Hardware Interfaces
 
-The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are disabled by default.  
+The design uses **SPI** for the MCP3008s and **I2C** for the OLED and pH EZO. These are disabled by default.  
 1.  In the SSH terminal:
     ```shell
 	sudo raspi-config
@@ -147,7 +147,7 @@ The design uses **SPI** (for the MCP3008s) and **I2C** (for the OLED). These are
 
 ### Transfer the code
 
-Since we are on Windows, the easiest way to move your .py and config.txt files to the Pi is using **SCP** (Secure Copy). Open a _new_ PowerShell window on your Windows desktop (not the one logged into the Pi) and run:  
+Since we are on Windows, the easiest way to move the .py and config.txt files to the Pi is using **SCP** (Secure Copy). Open a _new_ PowerShell window on your Windows desktop (not the one logged into the Pi) and run:  
 
 ```shell
 scp aquarium_script.py config.txt pi@aquamon.local:~/reef_monitor/
