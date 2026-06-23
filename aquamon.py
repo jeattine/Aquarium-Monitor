@@ -340,9 +340,9 @@ class Battery(GpioAnalog):
         # ---------------------------------------------------------------------------
         # Requires the following configuration:
         #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
-        # Translates the 0V-14.97V --> 0V-3.3V --> digital 0-1023
+        # Translates the 0V-15V --> 0V-3.3V --> digital 0-1023
         #----------------------------------------------------------------------------
-        voltage = self.averaged_sample/67.29
+        voltage = self.averaged_sample/68.2
         return voltage
 
     def read_value_text(self, value):
@@ -635,6 +635,7 @@ class Control:
         self.settings_found = []
         self.settings_unexpected = []
         self.settings_missing = []
+        self.sensor_unexpected = []
         self.start_time = datetime.now()
         self.start_time_str = None
         self.display_ph = 0.0
@@ -872,19 +873,25 @@ class Control:
                     # Handle sensor instantiations
                     parts = [p.strip() for p in clean_line.split(',')]
                     sensor_type = parts[0].strip().lower()
-
+                    sensor_validated = False
                     # Check if sensor_type matches one of our known sensor types
                     for key, sensor_class in self.SENSOR_MAP.items():
                         if sensor_type == key:
                             self.my_sensors.append(sensor_class(self, parts))
+                            sensor_validated = True
                             break
+                    if not sensor_validated:
+                        self.sensor_unexpected.append(sensor_type)
 
         if self.settings_unexpected:
-            print(f"Warning, unrecognized setting(s) detected: {self.settings_unexpected}")
+            print(f"Warning, unrecognized setting(s) detected and ignored: {self.settings_unexpected}")
         self.settings_missing = list(set(self.configurable_settings) - set(self.settings_found))
 
         if self.settings_missing:
             sys.exit(f'Missing setting(s) in config.txt file: {self.settings_missing}')
+
+        if self.sensor_unexpected:
+            print(f"Warning, unrecognized sensor type(s) detected and ignored: {self.sensor_unexpected}")
 
         # 1. Check that ports specified in config file are valid for the type of sensor
         # 2. Check that the same port was not specified twice
