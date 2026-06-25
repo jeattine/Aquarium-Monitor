@@ -8,7 +8,8 @@ $destinationFolder2 = "C:\Users\johna\Dropbox\ReefMonitor\"
 
 
 # Define the prompt message and choices
-$title   = "File Staging Confirmation"
+$title1   = "File ${file1} Staging Confirmation"
+$title2   = "File ${file2} Staging Confirmation"
 $message1 = "Copy ${sourceFile1} to ${destinationFolder1}"
 $message2 = "Copy ${sourceFile2} to ${destinationFolder2}"
 
@@ -18,7 +19,7 @@ $choices = [System.Management.Automation.Host.ChoiceDescription[]] @(
 )
 
 # The third argument (0) sets 'Yes' as the default choice if the user just hits Enter
-$decision = $Host.UI.PromptForChoice($title, $message1, $choices, 0)
+$decision = $Host.UI.PromptForChoice($title1, $message1, $choices, 0)
 
 # Process the user's decision
 # 0 = Yes, 1 = No (based on the array order above)
@@ -41,7 +42,7 @@ if ($decision -eq 0) {
     Write-Host "Skip staging of ${file1}" -ForegroundColor Yellow
 }
 
-$decision = $Host.UI.PromptForChoice($title, $message2, $choices, 0)
+$decision = $Host.UI.PromptForChoice($title2, $message2, $choices, 0)
 
 # Process the user's decision
 # 0 = Yes, 1 = No (based on the array order above)
@@ -57,7 +58,7 @@ if ($decision -eq 0) {
         Copy-Item -Path $sourceFile2 -Destination $destinationFolder2 -Force
         Write-Host "File successfully copied!" -ForegroundColor Green
 		$new_name = Read-Host "Enter your email address for sending alerts"
-		Write-Host "You entered: ${new_gmail_name}"
+		Write-Host "You entered: ${new_name}"
 		$content = Get-Content "${destinationFolder2}${file2}" -Raw
 		# Detect original line ending
 		$lineEnding = if ($content.Contains("`r`n")) { "`r`n" } else { "`n" }
