@@ -38,12 +38,12 @@ ph,     25,  2, PH,                  7.8-8.5,          30
 #        2. Ports 3,4 do not have pull-up resistors and can be used for voltage sensing
 #        3. Port 3 has a low-pass filter for additional noise reduction
 #        4. Ports 5-23 are wired with a 10K pull-up resistor
-#        5. Ports 2-13 are analog interfaces and only support analog class objects
+#        5. Ports 1-13 are analog interfaces and only support analog class objects
 #        6. Ports 14-23 are digital input interfaces and support digital class objects
 #        7. Port 24 has an internal 220 ohm resistor wired in series for LED attach
 #        8. 'Nag' is the number of hours before sending another alert for
 #           a specific condition violation that has not cleared.
-#        9. Port 25 I2C with a BNC socket on an Atlas Sci carrier board and PH EZO card
+#        9. Port 25 is BNC to a PH EZO on AS isolated carrier board using i2c interface
 #
 #------------------------------------------------------------------------------------
 # Network and Sampling Configuration
@@ -53,9 +53,9 @@ server_update_freq=60
 # Seconds between sampling the input ports
 sample_time=2
 # PH high calibration solution at 25 C
-ph_calibrate_high=9.18
+ph_calibrate_high=10.01
 # PH mid calibration solution at 25 C
-ph_calibrate_mid=6.87
+ph_calibrate_mid=7.01
 # Active maintenance mode warning timeout in minutes
 maintenance_timeout=30
 # Feed mode timeout in minutes
