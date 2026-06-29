@@ -122,7 +122,7 @@ class Sensor:
 
     def log(self, value):
         # Let the derived classes optionally maintain a log.
-        pass
+        return ""
 
 class GpioAnalog(Sensor):
     def __init__(self, controller, config_file_data, enable_averaging = True):
@@ -222,7 +222,7 @@ class TempSensor(GpioAnalog):
     def log(self, value):
             if self.is_water_sensor:
                 # Logging library handles the timestamp and file writing
-                self.controller.logger.info(f" Temp:{value:2.1f}")
+                return f"Temp:{value:2.1f}"
 
     def read_sensor_and_update(self):
         # Get trimmed mean from parent (GpioAnalog)
@@ -415,7 +415,7 @@ class Ph(Sensor):
 
     def log(self, value):
             # Logging library handles the timestamp and file writing
-            self.controller.logger.info(f" pH:{value:2.2f}")
+            return f"pH:{value:2.2f}"
 
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
@@ -1119,6 +1119,7 @@ class Control:
             current_hour = utc_now.hour
             if current_hour != self.log_hour_stamp:
                 time_to_log = True
+                log_data = []
                 self.log_hour_stamp = current_hour
             else:
                 time_to_log = False
@@ -1129,7 +1130,9 @@ class Control:
                 for sensor, current_val in zip(self.my_sensors, sensor_current_values):
                     status_file.write(f"{sensor.read_label()}:{sensor.read_value_text(current_val)}\n")
                     if time_to_log:
-                        sensor.log(current_val)
+                        log_text = sensor.log(current_val)
+                        if log_text:
+                            log_data.append(log_text)
                 status_file.write(f"Alert email list: {self.email_recipients}\n")
 
             if self.email_text:
@@ -1140,6 +1143,10 @@ class Control:
 
             self.sync_to_cloud(self.local_status_path, self.cloud_status_path)
 
+            if time_to_log and log_data:
+                log_str = ", ".join(log_data)
+                self.logger.info(f" {log_str}")
+            # Log may have increased in size outside of this flow
             current_log_size = self.local_log_path.stat().st_size
             if self.saved_log_size != current_log_size:
                 self.sync_to_cloud(self.local_log_path, self.cloud_log_path)
