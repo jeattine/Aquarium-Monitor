@@ -219,6 +219,11 @@ class TempSensor(GpioAnalog):
         # Check if this instance is the primary water sensor
         self.is_water_sensor = "Water" in self.label
 
+    def log(self, value):
+            if self.is_water_sensor:
+                # Logging library handles the timestamp and file writing
+                self.controller.logger.info(f" Temp:{value:2.1f}")
+
     def read_sensor_and_update(self):
         # Get trimmed mean from parent (GpioAnalog)
         super().read_sensor_and_update()
@@ -360,30 +365,12 @@ class Ph(Sensor):
         self.raw_high = None
         self.min_max_init(datetime.now())
         self.day_stamp = 0  # Force re-initialization on first sensor read after timezone is avail
-        self.log_stamp = datetime.now().hour
-        log_path = self.controller.local_phlog_path
-        self.ph_logger = logging.getLogger("PhLogger")
-        self.ph_logger.setLevel(logging.INFO)
         self.poll_frequency = int(self.config_info[5].strip())
 
         try:
             self.ph_ezo = EzoDevice(controller, self, address=0x63)
         except Exception as e:
             sys.exit(f"Could not create PH monitor thread object. {e}")
-
-        def log_converter(*args):
-            return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.controller.timezone)).timetuple()
-
-        # Avoid adding multiple log handlers if the class is re-instantiated
-        if not self.ph_logger.handlers:
-            # Keep 1 backup file, each max 100K
-            handler = RotatingFileHandler(log_path, maxBytes=100**4, backupCount=1)
-            # Standard CSV-like format: Time,Value
-            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
-            handler.setFormatter(formatter)
-
-            handler.formatter.converter = log_converter
-            self.ph_logger.addHandler(handler)
 
     def start_thread(self):
         self.ph_ezo.start()
@@ -427,15 +414,8 @@ class Ph(Sensor):
         self.min_timestamp = current_time
 
     def log(self, value):
-        current_hour = datetime.now().hour
-        if current_hour != self.log_stamp:
             # Logging library handles the timestamp and file writing
-            self.ph_logger.info(f" {value:2.2f}")
-            self.log_stamp = current_hour
-            local_file = self.controller.local_phlog_path
-            remote_file = self.controller.cloud_phlog_path
-            # Write the log file out to the cloud
-            self.controller.sync_to_cloud(local_file, remote_file)
+            self.controller.logger.info(f" pH:{value:2.2f}")
 
     def read_value_text(self, value):
         # need to include the mix/max values/timestamps
@@ -482,15 +462,19 @@ class CalibrationButtons:
                 self.controller.calibrate_text = "Failed"
             with self.controller.i2c_lock:
                 self.controller.update_display()
+            self.controller.logger.info(f" High calibration {self.controller.calibrate_text}")
 
     def _handle_mid_held_button(self):
         if self.controller.maintenance_mode:
             if self.ph_sensor.ph_ezo.calibrate("mid", self.controller.ph_calibrate_mid):
                 self.controller.calibrate_text = "Success"
+
             else:
                 self.controller.calibrate_text = "Failed"
             with self.controller.i2c_lock:
                 self.controller.update_display()
+            self.controller.logger.info(f" Mid calibration {self.controller.calibrate_text}")
+
 
     def _handle_mid_released_button(self):
         if self.controller.maintenance_mode:
@@ -506,6 +490,7 @@ class CalibrationButtons:
                     self.controller.update_display()
                 time.sleep(4)
             self.controller.reset_calibrate_mode()
+            self.controller.logger.info(f" {self.controller.calibrate_text}")
 
 class MaintenanceModeButton:
     def __init__(self, controller):
@@ -653,15 +638,33 @@ class Control:
         self.maintenance_email_sent = False
         self.cloud_status_path = None
         self.cloud_config_path = None
-        self.cloud_phlog_path = None
+        self.cloud_log_path = None
         self.ph_sensor = None
         self.calibrate_text = None
         self.calibrate_mode = False
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
-        self.local_phlog_path = Path('/tmp/phlog.txt')
-        self.saved_phlog_path = Path(Path(__file__).parent / 'logs/phlog.txt')
+        self.local_log_path = Path('/tmp/log.txt')
+        self.saved_log_path = Path(Path(__file__).parent / 'logs/log.txt')
+        self.logger = logging.getLogger("Logger")
+        self.logger.setLevel(logging.INFO)
+        self.saved_log_size = 0
+        self.log_hour_stamp = datetime.now(ZoneInfo("UTC")).hour
+
+        def log_converter(*args):
+            return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.timezone)).timetuple()
+
+        # Avoid adding multiple log handlers if the class is re-instantiated
+        if not self.logger.handlers:
+            # Keep 1 backup file, each max 100K
+            handler = RotatingFileHandler(self.local_log_path, maxBytes=100**4, backupCount=1)
+            # Standard CSV-like format: Time,Value
+            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
+            handler.setFormatter(formatter)
+
+            handler.formatter.converter = log_converter
+            self.logger.addHandler(handler)
 
         # Create the watchdog notifier
         self.notifier = sdnotify.SystemdNotifier()
@@ -824,40 +827,8 @@ class Control:
         # Restore logs kept in tmp from last process termination
         self.restore_logs()
 
-    def handle_shutdown(self, signum, frame):
-        print("SIGTERM received. Stopping loop and entering cleanup...")
-        self.stop_event.set()
-
-    def cleanup(self):
-        # stop event may not have been called yet in certain exit flows.
-        self.stop_event.set()
-
-        # Clean up hardware resources
-        try:
-            if hasattr(self, 'spi0'):
-                self.spi1.close()
-            if hasattr(self, 'spi1'):
-                self.spi2.close()
-            print("SPI buses closed successfully.")
-        except Exception as e:
-            print(f"Hardware resource cleanup error during termination: {e}")
-
-        # Cleanup the ph_ezo
-        if self.ph_sensor:
-            self.ph_sensor.terminate_thread()
-
-        # Clear the OLED
-        if self.display:
-            self.display.clear()
-            self.display.cleanup()
-
-        # Save tmp log file for later restore
-        try:
-            shutil.copy(self.local_phlog_path, self.saved_phlog_path)
-            print("Temporary phlog file stored sucessfully.")
-
-        except Exception as e:
-            print(f"Saving temp phlog to permanent area failed during termination: {e}")
+        # Log the monitor starting
+        self.logger.info(" Starting...")
 
     def load_config(self, filename):
         with open(filename, 'r') as monitor_config:
@@ -924,7 +895,7 @@ class Control:
         cloud_path_sanitized = self.cloud_path.strip('/')
         self.cloud_status_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/current.txt"
         self.cloud_config_path = f"{self.cloud_provider}:{cloud_path_sanitized}/config.txt"
-        self.cloud_phlog_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/phlog.txt"
+        self.cloud_log_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/log.txt"
         self.cloud_override_path = f"{self.cloud_provider}:{cloud_path_sanitized}/override.txt"
 
         # Initialize the start time string now that we have the timezone info
@@ -1140,18 +1111,25 @@ class Control:
         if (self.report_calls * self.sample_time) > self.server_update_freq or self.email_text:
             self.report_calls = 0
             self.notifier.notify("WATCHDOG=1")
-            cur_date_time = self.get_local_timestamp()
+
             status_file_path = self.local_status_path
+            utc_now = datetime.now(ZoneInfo("UTC"))
+            local_now = self.convert_to_local_time(utc_now)
+            cur_date_time =  local_now.strftime("%A %B %d %I:%M:%S %p")
+            current_hour = utc_now.hour
+            if current_hour != self.log_hour_stamp:
+                time_to_log = True
+                self.log_hour_stamp = current_hour
+            else:
+                time_to_log = False
             with status_file_path.open('w') as status_file:
                 status_file.write(f"Sample time: {cur_date_time}\n")
                 status_file.write(f"Monitor start time: {self.start_time_str}\n")
 
                 for sensor, current_val in zip(self.my_sensors, sensor_current_values):
                     status_file.write(f"{sensor.read_label()}:{sensor.read_value_text(current_val)}\n")
-                    try:
+                    if time_to_log:
                         sensor.log(current_val)
-                    except Exception as logerr:
-                        print(f"Exception={logerr} Error making log entry for {sensor.read_label()}!")
                 status_file.write(f"Alert email list: {self.email_recipients}\n")
 
             if self.email_text:
@@ -1161,6 +1139,11 @@ class Control:
                 self.send_email_alert()
 
             self.sync_to_cloud(self.local_status_path, self.cloud_status_path)
+
+            current_log_size = self.local_log_path.stat().st_size
+            if self.saved_log_size != current_log_size:
+                self.sync_to_cloud(self.local_log_path, self.cloud_log_path)
+                self.saved_local_log_size = current_log_size
 
     def sync_to_cloud(self, local_file, remote_dest):
         try:
@@ -1189,6 +1172,7 @@ class Control:
         self.maintenance_mode = True
         self.set_maintenance_led()
         self.maintenance_start = datetime.now()
+        self.logger.info(" Maintenance started...")
 
     def reset_maintenance(self):
         # If the button was held for 'hold_time' seconds, we must now reset maintenance mode
@@ -1200,16 +1184,19 @@ class Control:
             # reset any partial PH calibration actions
             self.ph_sensor.raw_mid = None
             self.ph_sensor.raw_high = None
+            self.logger.info(" ...Maintenance ended")
         else:
             self.feed_start = datetime.now()
             feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
             self.feed_seconds = int(feed_time_remaining.total_seconds())
             self.feed_mode = True
             self.set_feed_led()
+            self.logger.info(" Feed mode...")
 
     def reset_feed_mode(self):
         self.feed_mode = False
         self.reset_feed_led()
+        self.logger.info(" ...Feed mode ended")
 
     def test_feed_timeout(self):
         if self.feed_mode:
@@ -1235,10 +1222,48 @@ class Control:
         self.calibrate_mode = False
 
     def restore_logs(self):
-        if os.path.exists(self.saved_phlog_path):
-            shutil.copy(self.saved_phlog_path, self.local_phlog_path)
+        if os.path.exists(self.saved_log_path):
+            shutil.copy(self.saved_log_path, self.local_log_path)
             # Clear it so we don't keep restoring old data
-            os.remove(self.saved_phlog_path)
+            os.remove(self.saved_log_path)
+
+    def handle_shutdown(self, signum, frame):
+        print("SIGTERM received. Stopping loop and entering cleanup...")
+        self.stop_event.set()
+
+    def cleanup(self):
+        # Log that we are terminating
+        self.logger.info(" Terminating...")
+
+        # stop event may not have been called yet in certain exit flows.
+        self.stop_event.set()
+
+        # Clean up hardware resources
+        try:
+            if hasattr(self, 'spi0'):
+                self.spi1.close()
+            if hasattr(self, 'spi1'):
+                self.spi2.close()
+            print("SPI buses closed successfully.")
+        except Exception as e:
+            print(f"Hardware resource cleanup error during termination: {e}")
+
+        # Cleanup the ph_ezo
+        if self.ph_sensor:
+            self.ph_sensor.terminate_thread()
+
+        # Clear the OLED
+        if self.display:
+            self.display.clear()
+            self.display.cleanup()
+
+        # Save tmp log file for later restore
+        try:
+            shutil.copy(self.local_log_path, self.saved_log_path)
+            print("Temporary log file stored sucessfully.")
+
+        except Exception as e:
+            print(f"Saving temp log to permanent area failed during termination: {e}")
 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:
