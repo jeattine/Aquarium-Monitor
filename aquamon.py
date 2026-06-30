@@ -612,6 +612,27 @@ class EzoDevice(threading.Thread):
             print(f"Reading pH probe slope failed: response code {response[0]}")
             return None
 
+class CustomRcloneHandler(RotatingFileHandler):
+    def __init__(self, filename, maxBytes, backupCount, controller):
+        # Initialize the parent RotatingFileHandler
+        super().__init__(filename, maxBytes=maxBytes, backupCount=backupCount)
+        self.controller = controller
+
+    def doRollover(self):
+        # Perform the standard rotation
+        # This renames the file to self.baseFilename + ".1"
+        super().doRollover()
+
+        source_file = f"{self.baseFilename}.1"
+
+        # Define destination
+        utc_now = datetime.now(ZoneInfo("UTC"))
+        local_now = self.controller.convert_to_local_time(utc_now)
+        timestamp = local_now.strftime("%Y-%m-%d")
+        file_base, file_ext = os.path.splitext(self.controller.cloud_log_path)
+        dest_file = f"{file_base}_{timestamp}{file_ext}"
+        self.controller.sync_to_cloud(source_file, dest_file)
+
 class Control:
     def __init__(self):
         self.my_sensors = []
@@ -645,8 +666,8 @@ class Control:
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
-        self.local_log_path = Path('/tmp/log.txt')
-        self.saved_log_path = Path(Path(__file__).parent / 'logs/log.txt')
+        self.local_log_path = Path('/tmp/aquamon.log')
+        self.saved_log_path = Path(Path(__file__).parent / 'logs/aquamon.log')
         self.logger = logging.getLogger("Logger")
         self.logger.setLevel(logging.INFO)
         self.saved_log_size = 0
@@ -658,7 +679,8 @@ class Control:
         # Avoid adding multiple log handlers if the class is re-instantiated
         if not self.logger.handlers:
             # Keep 1 backup file, each max 100K
-            handler = RotatingFileHandler(self.local_log_path, maxBytes=100**4, backupCount=1)
+            handler = CustomRcloneHandler(self.local_log_path, maxBytes=100**4, backupCount=1, controller=self)
+
             # Standard CSV-like format: Time,Value
             formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
             handler.setFormatter(formatter)
@@ -824,7 +846,7 @@ class Control:
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
 
-        # Restore logs kept in tmp from last process termination
+        # Restore logs kept in tmp from last system reboot
         self.restore_logs()
 
         # Log the monitor starting
@@ -895,7 +917,7 @@ class Control:
         cloud_path_sanitized = self.cloud_path.strip('/')
         self.cloud_status_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/current.txt"
         self.cloud_config_path = f"{self.cloud_provider}:{cloud_path_sanitized}/config.txt"
-        self.cloud_log_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/log.txt"
+        self.cloud_log_path = f"{self.cloud_provider}:{cloud_path_sanitized}/status/aquamon.log"
         self.cloud_override_path = f"{self.cloud_provider}:{cloud_path_sanitized}/override.txt"
 
         # Initialize the start time string now that we have the timezone info
