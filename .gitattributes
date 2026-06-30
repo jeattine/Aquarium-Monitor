@@ -1,0 +1,10 @@
+# Set default behavior to let Git handle it automatically
+* text=auto
+
+# Force Python files to always use LF (regardless of OS)
+*.py text eol=lf
+
+# Explicitly set Windows files to CRLF if they require it
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
