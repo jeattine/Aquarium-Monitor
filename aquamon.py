@@ -490,7 +490,7 @@ class CalibrationButtons:
                     self.controller.update_display()
                 time.sleep(4)
             self.controller.reset_calibrate_mode()
-            self.controller.logger.info(f" {self.controller.calibrate_text}")
+            self.controller.logger.info(f" Probe {self.controller.calibrate_text}")
 
 class MaintenanceModeButton:
     def __init__(self, controller):
@@ -1264,13 +1264,7 @@ class Control:
             self.display.clear()
             self.display.cleanup()
 
-        # Save tmp log file for later restore
-        try:
-            shutil.copy(self.local_log_path, self.saved_log_path)
-            print("Temporary log file stored sucessfully.")
-
-        except Exception as e:
-            print(f"Saving temp log to permanent area failed during termination: {e}")
+        # /tmp/log.txt file saved by reef_monitor.service if shutdown is in progress
 
 def wait_for_internet(host="8.8.8.8", port=53, timeout=3):
     while True:

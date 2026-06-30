@@ -1,0 +1,25 @@
+[Unit]
+Description=Reef Aquarium Monitor Script
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=aquamon
+# Add Environment variable here
+Environment="AQUAMON_EMAIL=email_of_the_monitor"
+Environment="AQUAMON_EMAIL_PW=email_smtp_password"
+# Path to your python interpreter and your script
+ExecStart=/home/aquamon/reef_monitor/env/bin/python3 -u /home/aquamon/reef_monitor/aquamon.py
+# Working directory (helps if your script loads fonts or images from its own folder)
+WorkingDirectory=/home/aquamon/reef_monitor
+# Restart logic
+Restart=always
+# Wait 10 seconds before restarting to prevent rapid-fire loops
+RestartSec=10s
+WatchdogSec=240
+# This runs after the main process stops
+ExecStopPost=/home/aquamon/reef_monitor/save-logs.sh
+
+[Install]
+WantedBy=multi-user.target
