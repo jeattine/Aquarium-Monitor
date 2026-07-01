@@ -102,7 +102,7 @@ class Sensor:
                         if self.alarm_count == 2:
                             # Second alarm was sent with original nag interval. Reduce the interval
                             self.nag_level = self.nag_level/2
-                        self.controller.logger.info(f'{self.read_label()} Alert!')
+                        self.controller.logger.info(f' {self.read_label()} Alert!')
                 elif self.alarm_count:
                     self.alarm_count = 0
 
