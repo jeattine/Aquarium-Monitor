@@ -15,6 +15,8 @@ Code structure:
 
 ![Class structure](./images/ExampleOutput.png)
 
+![Class structure](./images/ExampleLog.png)
+
 This is the bigger picture, showing the network interfaces and wiring to the various sensors:
 ![Summary](./images/Summary.png)
 
