@@ -65,7 +65,7 @@ class Sensor:
         if not self.test_active:
             if current_value < 0 or self.controller.start_time + timedelta(seconds=120) > datetime.now():
                 return current_value
-        self.test_active = True
+            self.test_active = True
         if self.controller.maintenance_mode or self.controller.feed_mode:
             return current_value
         for condition in self.conditions:
@@ -677,17 +677,15 @@ class Control:
         def log_converter(*args):
             return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.timezone)).timetuple()
 
-        # Avoid adding multiple log handlers if the class is re-instantiated
-        if not self.logger.handlers:
-            # Keep 1 backup file, each max 100K
-            handler = CustomRcloneHandler(self.local_log_path, maxBytes=100**4, backupCount=1, controller=self)
+        # Keep one backup file, each max 100K
+        handler = CustomRcloneHandler(self.local_log_path, maxBytes=100**4, backupCount=1, controller=self)
 
-            # Standard CSV-like format: Time,Value
-            formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
-            handler.setFormatter(formatter)
+        # Standard CSV-like format: Time,Value
+        formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
+        handler.setFormatter(formatter)
 
-            handler.formatter.converter = log_converter
-            self.logger.addHandler(handler)
+        handler.formatter.converter = log_converter
+        self.logger.addHandler(handler)
 
         # Create the watchdog notifier
         self.notifier = sdnotify.SystemdNotifier()
@@ -766,7 +764,7 @@ class Control:
             '23': DigitalInputDevice(23, pull_up=True, bounce_time=0.05)  # Raspberry pin 16
         }
         # Port 24 (GPIO 24) used as output to the remote status LED
-        self.external_led = LED(24)  # Raspberry pin 18
+        self.external_led = LED(24)  # Raspberry pin 18, GPIO 24
 
         # Analog mapping is a sequential map of port numbers to channels
         #    Monitor port number 1-8 ->  maps to MCP3008 chip 1, channels 0-7
@@ -847,7 +845,7 @@ class Control:
         # Initialize reported calls to force a server update at startup
         self.report_calls = self.server_update_freq / self.sample_time
 
-        # Restore logs kept in tmp from last system reboot
+        # Restore logs into tmp from last system reboot
         self.restore_logs()
 
         # Log the monitor starting
