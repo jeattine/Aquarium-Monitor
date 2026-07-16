@@ -80,10 +80,7 @@ class Sensor:
                 time_end = ''
                 value = condition.split('-')
             value_low = value[0]
-            if len(value) == 2:
-                value_high = value[1]
-            else:
-                value_high = value[0]
+            value_high = value[1 if len(value) == 2 else 0]
 
             # Are we in the indicated time range?
             if not time_start or self.in_time_range(time_start, time_end):
@@ -102,7 +99,7 @@ class Sensor:
                         if self.alarm_count == 2:
                             # Second alarm was sent with original nag interval. Reduce the interval
                             self.nag_level = self.nag_level/2
-                        self.controller.logger.info(f' {self.read_label()} Alert!')
+                        self.controller.logger.info(f"{self.read_label()} Alert!")
                 elif self.alarm_count:
                     self.alarm_count = 0
 
@@ -463,7 +460,7 @@ class CalibrationButtons:
                 self.controller.calibrate_text = "Failed"
             with self.controller.i2c_lock:
                 self.controller.update_display()
-            self.controller.logger.info(f" High calibration {self.controller.calibrate_text}")
+            self.controller.logger.info(f"High calibration {self.controller.calibrate_text}")
 
     def _handle_mid_held_button(self):
         if self.controller.maintenance_mode:
@@ -474,7 +471,7 @@ class CalibrationButtons:
                 self.controller.calibrate_text = "Failed"
             with self.controller.i2c_lock:
                 self.controller.update_display()
-            self.controller.logger.info(f" Mid calibration {self.controller.calibrate_text}")
+            self.controller.logger.info(f"Mid calibration {self.controller.calibrate_text}")
 
 
     def _handle_mid_released_button(self):
@@ -491,7 +488,7 @@ class CalibrationButtons:
                     self.controller.update_display()
                 time.sleep(4)
             self.controller.reset_calibrate_mode()
-            self.controller.logger.info(f" Probe {self.controller.calibrate_text}")
+            self.controller.logger.info(f"Probe {self.controller.calibrate_text}")
 
 class MaintenanceModeButton:
     def __init__(self, controller):
@@ -681,7 +678,7 @@ class Control:
         handler = CustomRcloneHandler(self.local_log_path, maxBytes=100**4, backupCount=1, controller=self)
 
         # Standard CSV-like format: Time,Value
-        formatter = logging.Formatter('%(asctime)s,%(message)s', datefmt='%Y-%m-%d %H:%M')
+        formatter = logging.Formatter('%(asctime)s, %(message)s', datefmt='%Y-%m-%d %H:%M')
         handler.setFormatter(formatter)
 
         handler.formatter.converter = log_converter
@@ -849,7 +846,7 @@ class Control:
         self.restore_logs()
 
         # Log the monitor starting
-        self.logger.info(" Starting...")
+        self.logger.info("Starting...")
 
     def load_config(self, filename):
         with open(filename, 'r') as monitor_config:
@@ -1166,7 +1163,7 @@ class Control:
 
             if time_to_log and log_data:
                 log_str = ", ".join(log_data)
-                self.logger.info(f" {log_str}")
+                self.logger.info(f"{log_str}")
             # Log may have increased in size outside of this flow
             current_log_size = self.local_log_path.stat().st_size
             if self.saved_log_size != current_log_size:
@@ -1200,7 +1197,7 @@ class Control:
         self.maintenance_mode = True
         self.set_maintenance_led()
         self.maintenance_start = datetime.now()
-        self.logger.info(" Maintenance started...")
+        self.logger.info("Maintenance started...")
 
     def reset_maintenance(self):
         # If the button was held for 'hold_time' seconds, we must now reset maintenance mode
@@ -1212,19 +1209,19 @@ class Control:
             # reset any partial PH calibration actions
             self.ph_sensor.raw_mid = None
             self.ph_sensor.raw_high = None
-            self.logger.info(" ...Maintenance ended")
+            self.logger.info("...Maintenance ended")
         else:
             self.feed_start = datetime.now()
             feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
             self.feed_seconds = int(feed_time_remaining.total_seconds())
             self.feed_mode = True
             self.set_feed_led()
-            self.logger.info(" Feed mode...")
+            self.logger.info("Feed mode...")
 
     def reset_feed_mode(self):
         self.feed_mode = False
         self.reset_feed_led()
-        self.logger.info(" ...Feed mode ended")
+        self.logger.info("...Feed mode ended")
 
     def test_feed_timeout(self):
         if self.feed_mode:
@@ -1235,7 +1232,8 @@ class Control:
 
     def test_long_maintenance_mode(self):
         if self.maintenance_mode and self.maintenance_start + timedelta(minutes=self.maintenance_delta) < datetime.now():
-            self.email_text.append(f"Warning: maintenance mode active for {self.maintenance_delta} minute(s)\n")
+            self.email_text.append(f"Warning: maintenance mode active for {self.maintenance_delta} minutes\n")
+            self.logger.info(f"Maintenance mode active {self.maintenance_delta} minutes")
             self.maintenance_email_sent = True
             self.maintenance_delta += self.maintenance_timeout
         elif self.maintenance_email_sent and not self.maintenance_mode:
@@ -1261,7 +1259,7 @@ class Control:
 
     def cleanup(self):
         # Log that we are terminating
-        self.logger.info(" Terminating...")
+        self.logger.info("Terminating...")
 
         # stop event may not have been called yet in certain exit flows.
         self.stop_event.set()
