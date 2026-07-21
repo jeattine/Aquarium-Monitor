@@ -60,6 +60,18 @@ class Sensor:
         # Needs to be implemented in the derived classes
         raise NotImplementedError
 
+    def read_value_text(self, value):
+        # Needs to be implemented in the derived classes
+        raise NotImplementedError
+
+def read_sensor_and_update(self):
+        # Needs to be implemented in the derived classes
+        raise NotImplementedError
+
+    def is_port_valid(self):
+        # Needs to be implemented in the derived classes
+        raise NotImplementedError
+
     def test(self):
         current_value = self.read_value()
         if not self.test_active:
@@ -160,11 +172,9 @@ class GpioDigital(Sensor):
     def __init__(self, controller, config_file_data):
         super(GpioDigital, self).__init__(controller, config_file_data)
         self.snapshot = -1
-        self.ones_count = 0
-        self.zeros_count = 0
-        self.ones_total = 0
-        self.zeros_total = 0
         self.previous_state = 0
+        self.ones_count = self.zeros_count = 0
+        self.ones_total = self.zeros_total = 0
         self.value_zero_text = " " + self.config_info[5].strip()
         self.value_one_text = " " + self.config_info[6].strip()
 
@@ -501,13 +511,12 @@ class EzoDevice(threading.Thread):
     def __init__(self, controller, sensor, address):
         super().__init__()
         self.controller = controller
+        self.sensor = sensor
         self.address = address
         self.current_ph = 8.0
         self.running = False
         self.lock = threading.Lock()
         self.bus = SMBus(1)
-        self.address = 0x63
-        self.sensor = sensor
 
     def run(self):
         self.running = True
