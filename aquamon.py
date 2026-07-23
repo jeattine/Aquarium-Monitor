@@ -36,12 +36,13 @@ from smbus2 import SMBus, i2c_msg
 # MCP3008 Chip 1: Channels 0-4 -> Ports 9-13 (unused channels 5,6,7)
 # OLED: I2C Address 0x3C
 # PH-EZO: I2C Address 0x63 (Port 25  BNC connector)
-# GPIO 6  (pin 31) used for system restart
-# GPIO 12 (pin 32) is used to enable maintenance mode
-# GPIO 13 (pin 33) is used for the system LED
-# GPIO 24 (pin 18) is used for output to remote LED status
-# GPIO 25 (pin 22) used for pH mid Calibrate
-# GPIO 27 (pin 13) used for pH High Calibrate
+# GPIO 6  (pin 31) used for the system restart/shutdown button
+# GPIO 12 (pin 32) is used for maintenance mode switch and feed mode button
+# GPIO 13 (pin 33) is used for the system booted LED indicator
+# GPIO 24 (pin 18) is used for the remote alarm/mode LED indicator
+# GPIO 25 (pin 22) used for pH mid Calibrate button
+# GPIO 27 (pin 13) used for pH High Calibrate button
+# See Control:digital_map for the digital input GPIO and pin assignments
 
 class Sensor:
     def __init__(self, controller, config_file_data):
@@ -674,7 +675,7 @@ class Control:
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
         self.local_log_path = Path('/tmp/aquamon.log')
-        self.saved_log_path = Path(Path(__file__).parent / 'logs/aquamon.log')
+        self.saved_log_path = Path(__file__).parent / 'logs/aquamon.log')
         self.logger = logging.getLogger("Logger")
         self.logger.setLevel(logging.INFO)
         self.saved_log_size = 0
