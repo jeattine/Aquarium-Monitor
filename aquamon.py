@@ -65,7 +65,7 @@ class Sensor:
         # Needs to be implemented in the derived classes
         raise NotImplementedError
 
-def read_sensor_and_update(self):
+    def read_sensor_and_update(self):
         # Needs to be implemented in the derived classes
         raise NotImplementedError
 
@@ -150,7 +150,7 @@ class GpioAnalog(Sensor):
         return self.averaged_sample
 
     def read_value_text(self, value):
-        return f'{value:6.1f}'
+        return f'{value:5.1f}'
 
     def read_sensor_and_update(self):
          # Simply append; the oldest value is dropped automatically
@@ -176,8 +176,8 @@ class GpioDigital(Sensor):
         self.previous_state = 0
         self.ones_count = self.zeros_count = 0
         self.ones_total = self.zeros_total = 0
-        self.value_zero_text = " " + self.config_info[5].strip()
-        self.value_one_text = " " + self.config_info[6].strip()
+        self.value_zero_text = self.config_info[5].strip()
+        self.value_one_text = self.config_info[6].strip()
 
     def read_value(self):
         return self.snapshot
@@ -300,9 +300,9 @@ class LightSensor(GpioAnalog):
 class ThreeState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(ThreeState, self).__init__(controller, config_file_data)
-        self.low_level_text = " " + self.config_info[5].strip()
-        self.mid_level_text = " " + self.config_info[6].strip()
-        self.high_level_text = " " + self.config_info[7].strip()
+        self.low_level_text = self.config_info[5].strip()
+        self.mid_level_text = self.config_info[6].strip()
+        self.high_level_text = self.config_info[7].strip()
 
     def read_value(self):
         level = self.averaged_sample
@@ -318,10 +318,10 @@ class ThreeState(GpioAnalog):
 class FourState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(FourState, self).__init__(controller, config_file_data)
-        self.level1_text = " " + self.config_info[5].strip()
-        self.level2_text = " " + self.config_info[6].strip()
-        self.level3_text = " " + self.config_info[7].strip()
-        self.level4_text = " " + self.config_info[8].strip()
+        self.level1_text = self.config_info[5].strip()
+        self.level2_text = self.config_info[6].strip()
+        self.level3_text = self.config_info[7].strip()
+        self.level4_text = self.config_info[8].strip()
 
     def read_value(self):
         level = self.averaged_sample
@@ -361,10 +361,10 @@ class Battery(GpioAnalog):
 
     def read_value_text(self, value):
         if value > self.good_fair_threshold:
-            return f" {self.good_text} ({value:2.1f})"
+            return f"{self.good_text} ({value:2.1f})"
         elif value > self.fair_bad_threshold:
-            return f" {self.fair_text} ({value:2.1f})"
-        return f" {self.bad_text} ({value:2.1f})"
+            return f"{self.fair_text} ({value:2.1f})"
+        return f"{self.bad_text} ({value:2.1f})"
 
 class Ph(Sensor):
     def __init__(self, controller, config_file_data):
@@ -675,7 +675,7 @@ class Control:
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
         self.local_log_path = Path('/tmp/aquamon.log')
-        self.saved_log_path = Path(__file__).parent / 'logs/aquamon.log')
+        self.saved_log_path = Path(__file__).parent / 'logs/aquamon.log'
         self.logger = logging.getLogger("Logger")
         self.logger.setLevel(logging.INFO)
         self.saved_log_size = 0
@@ -1156,7 +1156,7 @@ class Control:
                 status_file.write(f"Monitor start time: {self.start_time_str}\n")
 
                 for sensor, current_val in zip(self.my_sensors, sensor_current_values):
-                    status_file.write(f"{sensor.read_label()}:{sensor.read_value_text(current_val)}\n")
+                    status_file.write(f"{sensor.read_label()}: {sensor.read_value_text(current_val)}\n")
                     if time_to_log:
                         log_text = sensor.log(current_val)
                         if log_text:
