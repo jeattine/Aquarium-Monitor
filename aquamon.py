@@ -51,9 +51,9 @@ class Sensor:
         # Initialize very old time
         self.last_sent_alert = datetime.now() - timedelta(days=365)
         self.test_active = False
+        self.alarm_count = 0
         self.port = self.config_info[1].strip()
         self.nag_level = float(self.config_info[2].strip())
-        self.alarm_count = 0
         self.label = self.config_info[3].strip()
         self.conditions = self.config_info[4].strip().split('+')
 
