@@ -1083,28 +1083,29 @@ class Control:
             x.read_sensor_and_update()
 
     def send_email_alert(self):
+        # Build the full email body as a single list/string
+        body_parts = ["\n".join(self.email_text)]
+
+        # Add the status file contents if available
+        try:
+            contents = self.local_status_path.read_text()
+            body_parts.append(contents.replace(';', '\n'))
+        except FileNotFoundError:
+            print("Warning: current.txt not found for email attachment.")
+
+        # Add the link
+        body_parts.append(f"{self.cloud_status_path}\n")
+
+        # Combine all parts with double line breaks for clear section separation
+        full_body_text = "\n".join(body_parts)
+
+        # Attach a single MIMEText object to outer
         outer = MIMEMultipart()
         outer['Subject'] = self.email_subject
         outer['From'] = self.me
         outer['To'] = self.email_recipients
-        # Add the alert message
-        msg = MIMEText("\n".join(self.email_text))
-        outer.attach(msg)
 
-        # Path to current status
-        status_file = self.local_status_path
-
-        # Attach the current status information
-        try:
-            contents = status_file.read_text()
-            stats = MIMEText(contents.replace(';', '\n'))
-            outer.attach(stats)
-        except FileNotFoundError:
-            print("Warning: current.txt not found for email attachment.")
-
-        # Add a link to check the current status
-        email_link = MIMEText(f"{self.cloud_status_path}\n")
-        outer.attach(email_link)
+        outer.attach(MIMEText(full_body_text, 'plain'))
 
         # Send the email
         try:
