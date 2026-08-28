@@ -1096,7 +1096,7 @@ class Control:
         # Add the link
         body_parts.append(f"{self.cloud_status_path}\n")
 
-        # Combine all parts with double line breaks for clear section separation
+        # Combine all parts with line breaks for section separation
         full_body_text = "\n".join(body_parts)
 
         # Attach a single MIMEText object to outer
