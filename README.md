@@ -289,6 +289,23 @@ When the monitor is up and running via the reef_monitor service, use these comma
 | Update monitor code | update-aquamon |
 | Update config file | update-config |
 
+## Tailscale periodic re-authentication
+
+Tailscale requires periodic re-authentication (by default every 180 days) for security. Because Tailscale does not have its own separate username/password system, you authenticated using an existing Identity Provider (SSO) such as Google, Microsoft, GitHub, or Apple.  
+
+**Step 1:** Identify Your Account.  Try these quick methods to figure out which email/account you used:Check your email inboxes: Search your personal email accounts (Google/Gmail, Microsoft, etc.) for Tailscale or "Welcome to Tailscale". Check browser history: Go to login.tailscale.com in your web browser. If you have active sessions or stored cookies, it may auto-redirect to your admin console or highlight the account provider you previously selected.
+
+**Step 2:** Re-authenticate Your LaptopOpen the Tailscale desktop app or run tailscale up in your terminal.When prompted, log in using the identity provider (e.g., Google) linked to your primary account.  
+
+**Step 3:** Re-authenticate Your Raspberry PiOnce you are logged into your primary account on your browser: Local Terminal Access: If your Pi is nearby, log in via a local terminal (or local network SSH) and run:
+
+```shell 
+sudo tailscale up --force-reauth
+```
+
+Follow the URL: Copy the URL output by the command and paste it into the browser where you are logged into Tailscale.
+
+**(Optional) Disable Key Expiry:** To prevent the Pi from disconnecting again in 180 days: Go to the Tailscale Admin Console.Find your Raspberry Pi in the Machines list.Click the ... menu next to it and select Disable key expiry. You can do this for other mobile devices such as ipads and android phones.
 
 ## Monitor Enclosure
 
