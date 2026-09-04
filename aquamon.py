@@ -49,7 +49,7 @@ class Sensor:
         self.controller = controller
         self.config_info = config_file_data
         # Initialize very old time
-        self.last_sent_alert = datetime.now() - timedelta(days=365)
+        self.last_sent_alert = datetime.now(ZoneInfo("UTC")) - timedelta(days=365)
         self.test_active = False
         self.alarm_count = 0
         self.port = self.config_info[1].strip()
@@ -74,12 +74,15 @@ class Sensor:
         raise NotImplementedError
 
     def test(self):
+        c = self.controller
         current_value = self.read_value()
         if not self.test_active:
-            if current_value < 0 or self.controller.start_time + timedelta(seconds=120) > datetime.now():
+            start_delay_window = c.start_time + timedelta(seconds=120)
+            utc_time = datetime.now(ZoneInfo("UTC"))
+            if current_value < 0 or start_delay_window > utc_time:
                 return current_value
             self.test_active = True
-        if self.controller.maintenance_mode or self.controller.feed_mode:
+        if c.maintenance_mode or c.feed_mode:
             return current_value
         for condition in self.conditions:
             if ':' in condition:
@@ -97,29 +100,35 @@ class Sensor:
 
             # Are we in the indicated time range?
             if not time_start or self.in_time_range(time_start, time_end):
-                if current_value < float(value_low) or current_value > float(value_high):
+                vlow_f = float(value_low)
+                vhigh_f = float(value_high)
+                if current_value < vlow_f or current_value > vhigh_f:
                     # Set flag that an alarm is active during this round of sampling
-                    self.controller.alarm_active = True
-                    self.controller.alarm_text = self.label
+                    c.alarm_active = True
+                    c.alarm_text = self.label
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
-                    if (self.last_sent_alert + timedelta(hours=self.nag_level)) < datetime.now():
-                        self.controller.email_text.append(f'{self.read_label()} Alert!\n')
-                        self.last_sent_alert = datetime.now()
+                    utc_time = datetime.now(ZoneInfo("UTC"))
+                    nag_window = timedelta(hours=self.nag_level)
+                    if (self.last_sent_alert + nag_window) < utc_time:
+                        c.email_text.append(f'{self.read_label()} Alert!\n')
+                        self.last_sent_alert = datetime.now(ZoneInfo("UTC"))
                         # force a server update prior to sending the alarm
-                        self.controller.report_calls = self.controller.server_update_freq / self.controller.sample_time
+                        c.report_calls = c.server_update_freq / c.sample_time
                         self.alarm_count = self.alarm_count + 1
                         if self.alarm_count == 2:
-                            # Second alarm was sent with original nag interval. Reduce the interval
+                            # Reduce the interval
                             self.nag_level = self.nag_level/2
-                        self.controller.logger.info(f"{self.read_label()} Alert!")
+                        c.logger.info(f"{self.read_label()} Alert!")
                 elif self.alarm_count:
                     self.alarm_count = 0
 
         return current_value
 
     def in_time_range(self, time_start, time_end):
-        now = self.controller.convert_to_local_time(datetime.now()).time()
+        c = self.controller
+        utc_time = datetime.now(ZoneInfo("UTC"))
+        now = c.convert_to_local_time(utc_time).time()
         start = datetime.strptime(time_start, "%H:%M").time()
         end = datetime.strptime(time_end, "%H:%M").time()
 
@@ -245,7 +254,9 @@ class TempSensor(GpioAnalog):
         if self.ema_value is None:
             self.ema_value = current_trimmed_mean
         else:
-            self.ema_value = (self.alpha * current_trimmed_mean) + ((1 - self.alpha) * self.ema_value)
+            self.ema_value = (self.alpha * current_trimmed_mean) + (
+                (1 - self.alpha) * self.ema_value
+            )
 
         # Calculate Resistance
         if self.ema_value <= 0:
@@ -372,8 +383,8 @@ class Ph(Sensor):
         self.current_ph = 6.0
         self.raw_mid = None
         self.raw_high = None
-        self.min_max_init(datetime.now())
-        self.day_stamp = 0  # Force re-initialization on first sensor read after timezone is avail
+        self.min_max_init(datetime.now(ZoneInfo("UTC")))
+        self.day_stamp = 0  # Initialization on first sensor read after timezone is avail
         self.poll_frequency = int(self.config_info[5].strip())
 
         try:
@@ -393,34 +404,36 @@ class Ph(Sensor):
             print("pH_ezo thread ended gracefully.")
 
     def read_sensor_and_update(self):
+        c = self.controller
         self.current_ph = self.ph_ezo.get_ph()
         # Do min/max reporting daily
-        current_time = self.controller.convert_to_local_time(datetime.now())
-        current_day = current_time.day
+        utc_time = datetime.now(ZoneInfo("UTC"))
+        local_time = c.convert_to_local_time(utc_time)
+        current_day = local_time.day
         if current_day != self.day_stamp:
             # Start a new max/min period of recording
-            self.min_max_init(current_time)
-            self.day_stamp = current_time.day
+            self.min_max_init(local_time)
+            self.day_stamp = local_time.day
 
         # Record PH in controller for Display Panel
-        self.controller.display_ph = self.current_ph
+        c.display_ph = self.current_ph
 
-        if self.test_active and not self.controller.maintenance_mode:
+        if self.test_active and not c.maintenance_mode:
             if self.current_ph > self.max_ph:
                 self.max_ph = self.current_ph
-                self.max_timestamp = current_time
+                self.max_timestamp = local_time
             if self.current_ph < self.min_ph:
                 self.min_ph = self.current_ph
-                self.min_timestamp = current_time
+                self.min_timestamp = local_time
 
     def read_value(self):
         return self.current_ph
 
-    def min_max_init(self, current_time):
+    def min_max_init(self, local_time):
         self.max_ph = 4
         self.min_ph = 12
-        self.max_timestamp = current_time
-        self.min_timestamp = current_time
+        self.max_timestamp = local_time
+        self.min_timestamp = local_time
 
     def log(self, value):
             # Logging library handles the timestamp and file writing
@@ -520,12 +533,15 @@ class EzoDevice(threading.Thread):
         self.bus = SMBus(1)
 
     def run(self):
+        c = self.controller
         self.running = True
         while self.running:
-            if not self.controller.calibrate_mode:
+            if not c.calibrate_mode:
                 self.poll()
-            sleep_time = (2 if self.controller.maintenance_mode else self.sensor.poll_frequency)
-            if self.controller.stop_event.wait(sleep_time):
+            sleep_time = (
+                2 if c.maintenance_mode else self.sensor.poll_frequency
+            )
+            if c.stop_event.wait(sleep_time):
                 break
 
     def poll(self):
@@ -643,49 +659,64 @@ class CustomRcloneHandler(RotatingFileHandler):
 
 class Control:
     def __init__(self):
+        # State flags
+        self.connected = False
+        self.alarm_active = False
+        self.alarm_led_active = False
+        self.maintenance_mode = False
+        self.maintenance_held = False
+        self.feed_mode = False
+        self.maintenance_email_sent = False
+        self.calibrate_mode = False
+
+        # Values
+        self.display_ph = 0.0
+        self.display_temp = 0.0
+        self.saved_log_size = 0
+        self.feed_seconds = None
+
+        # Lists
         self.my_sensors = []
         self.email_text = []
-        self.connected = False
         self.settings_found = []
         self.settings_unexpected = []
         self.settings_missing = []
         self.sensor_unexpected = []
-        self.start_time = datetime.now()
-        self.start_time_str = None
-        self.display_ph = 0.0
-        self.display_temp = 0.0
-        self.alarm_active = False
-        self.alarm_led_active = False
-        self.alarm_text = None
-        self.maintenance_mode = False
-        self.feed_mode = False
+
+        # Timeststamps
+        self.start_time = datetime.now(ZoneInfo("UTC"))
+        self.log_hour_stamp = datetime.now(ZoneInfo("UTC")).hour
         self.maintenance_start = None
         self.feed_start = None
-        self.feed_seconds = None
-        self.maintenance_held = False
         self.maintenance_released = None
-        self.maintenance_email_sent = False
+
+        # Strings and paths
+        self.start_time_str = None
+        self.alarm_text = None
         self.cloud_status_path = None
         self.cloud_config_path = None
         self.cloud_log_path = None
-        self.ph_sensor = None
         self.calibrate_text = None
-        self.calibrate_mode = False
         self.local_config_path = Path(__file__).parent / 'config.txt'
         self.local_status_path = Path('/tmp/current.txt')
         self.local_override_path = Path('/tmp/override.txt')
         self.local_log_path = Path('/tmp/aquamon.log')
         self.saved_log_path = Path(__file__).parent / 'logs/aquamon.log'
+
+        # Create notifier for the watchdog
+        self.notifier = sdnotify.SystemdNotifier()
+
         self.logger = logging.getLogger("Logger")
         self.logger.setLevel(logging.INFO)
-        self.saved_log_size = 0
-        self.log_hour_stamp = datetime.now(ZoneInfo("UTC")).hour
 
         def log_converter(*args):
-            return datetime.now(ZoneInfo("UTC")).astimezone(ZoneInfo(self.timezone)).timetuple()
+            utc = datetime.now(ZoneInfo("UTC"))
+            return utc.astimezone(ZoneInfo(self.timezone)).timetuple()
 
         # Keep one backup file, each max 100K
-        handler = CustomRcloneHandler(self.local_log_path, maxBytes=100**4, backupCount=1, controller=self)
+        handler = CustomRcloneHandler(
+            self.local_log_path, maxBytes=100**4, backupCount=1, controller=self
+        )
 
         # Standard CSV-like format: Time,Value
         formatter = logging.Formatter('%(asctime)s, %(message)s', datefmt='%Y-%m-%d %H:%M')
@@ -693,9 +724,6 @@ class Control:
 
         handler.formatter.converter = log_converter
         self.logger.addHandler(handler)
-
-        # Create the watchdog notifier
-        self.notifier = sdnotify.SystemdNotifier()
 
         # List of required environment variables
         required_vars = {
@@ -1049,7 +1077,9 @@ class Control:
     def update_display(self):
         with canvas(self.display) as draw:
             if self.display:
-                line1 = f"Time: {self.convert_to_local_time(datetime.now()).strftime('%H:%M:%S')}"
+                utc_time = datetime.now(ZoneInfo("UTC"))
+                local_time = self.convert_to_local_time(utc_time)
+                line1 = f"Time: {local_time.strftime('%H:%M:%S')}"
                 draw.text((0, 0), line1, font=self.font_medium, fill="white")
                 if self.alarm_led_active and not self.maintenance_mode:
                     line2 = "Alert Active!"
@@ -1207,7 +1237,7 @@ class Control:
         self.maintenance_held = True
         self.maintenance_mode = True
         self.set_maintenance_led()
-        self.maintenance_start = datetime.now()
+        self.maintenance_start = datetime.now(ZoneInfo("UTC"))
         self.logger.info("Maintenance started...")
 
     def reset_maintenance(self):
@@ -1222,8 +1252,10 @@ class Control:
             self.ph_sensor.raw_high = None
             self.logger.info("...Maintenance ended")
         else:
-            self.feed_start = datetime.now()
-            feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
+            self.feed_start = datetime.now(ZoneInfo("UTC"))
+            feed_window = timedelta(minutes=self.feed_timeout)
+            utc_time = datetime.now(ZoneInfo("UTC"))
+            feed_time_remaining = self.feed_start + feed_window - utc_time
             self.feed_seconds = int(feed_time_remaining.total_seconds())
             self.feed_mode = True
             self.set_feed_led()
@@ -1236,13 +1268,17 @@ class Control:
 
     def test_feed_timeout(self):
         if self.feed_mode:
-            feed_time_remaining = self.feed_start + timedelta(minutes=self.feed_timeout) - datetime.now()
+            feed_window = timedelta(minutes=self.feed_timeout)
+            utc_time = datetime.now(ZoneInfo("UTC"))
+            feed_time_remaining = self.feed_start + feed_window - utc_time
             self.feed_seconds = int(feed_time_remaining.total_seconds())
             if self.feed_seconds < 0:
                 self.reset_feed_mode()
 
     def test_long_maintenance_mode(self):
-        if self.maintenance_mode and self.maintenance_start + timedelta(minutes=self.maintenance_delta) < datetime.now():
+        maintenance_window = timedelta(minutes=self.maintenance_delta)
+        utc_time = datetime.now(ZoneInfo("UTC"))
+        if self.maintenance_mode and self.maintenance_start + maintenance_window < utc_time:
             self.email_text.append(f"Warning: maintenance mode active for {self.maintenance_delta} minutes\n")
             self.logger.info(f"Maintenance mode active {self.maintenance_delta} minutes")
             self.maintenance_email_sent = True
