@@ -76,9 +76,9 @@ class Sensor:
     def test(self):
         c = self.controller
         current_value = self.read_value()
+        utc_time = datetime.now(ZoneInfo("UTC"))
         if not self.test_active:
             start_delay_window = c.start_time + timedelta(seconds=120)
-            utc_time = datetime.now(ZoneInfo("UTC"))
             if current_value < 0 or start_delay_window > utc_time:
                 return current_value
             self.test_active = True
@@ -95,24 +95,21 @@ class Sensor:
                 time_start = ''
                 time_end = ''
                 value = condition.split('-')
-            value_low = value[0]
-            value_high = value[1 if len(value) == 2 else 0]
+            value_low = float(value[0])
+            value_high = float(value[1 if len(value) == 2 else 0])
 
             # Are we in the indicated time range?
             if not time_start or self.in_time_range(time_start, time_end):
-                vlow_f = float(value_low)
-                vhigh_f = float(value_high)
-                if current_value < vlow_f or current_value > vhigh_f:
+                if current_value < value_low or current_value > value_high:
                     # Set flag that an alarm is active during this round of sampling
                     c.alarm_active = True
                     c.alarm_text = self.label
                     # Read the nag level and timestamp of last email,
                     # If beyond the no-nag window, send the alert email.
-                    utc_time = datetime.now(ZoneInfo("UTC"))
                     nag_window = timedelta(hours=self.nag_level)
                     if (self.last_sent_alert + nag_window) < utc_time:
                         c.email_text.append(f'{self.read_label()} Alert!\n')
-                        self.last_sent_alert = datetime.now(ZoneInfo("UTC"))
+                        self.last_sent_alert = utc_time
                         # force a server update prior to sending the alarm
                         c.report_calls = c.server_update_freq / c.sample_time
                         self.alarm_count = self.alarm_count + 1
@@ -1252,9 +1249,9 @@ class Control:
             self.ph_sensor.raw_high = None
             self.logger.info("...Maintenance ended")
         else:
-            self.feed_start = datetime.now(ZoneInfo("UTC"))
-            feed_window = timedelta(minutes=self.feed_timeout)
             utc_time = datetime.now(ZoneInfo("UTC"))
+            self.feed_start = utc_time
+            feed_window = timedelta(minutes=self.feed_timeout)
             feed_time_remaining = self.feed_start + feed_window - utc_time
             self.feed_seconds = int(feed_time_remaining.total_seconds())
             self.feed_mode = True
