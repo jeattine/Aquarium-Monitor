@@ -9,7 +9,7 @@ battery, 4,24,  Battery,             13.2-15.0,       13.2, Good, 12.9, Fair, Po
 light,   5, 8,  Scrubber Light,      21:15-09:45?200-1023+10:15-20:45?0-300
 rflow,   6, 1,  Wave Makers,         14:20-14:00?10-500, NA, NA
 3state,  7, 1,  Water level,         14:20-14:00?256-768, Low, Ok, High
-light,   8, 2,  Main Light,          10:10-20:00?900-1023+21:40-08:00?0-550
+light,   8, 2,  Main Light,          11:10-20:00?900-1023+21:40-08:00?0-550
 3state,  9, 1,  Sump Level,          14:20-14:00?256-768, Low, Ok, High
 3state, 10, 8,  Top-off reservoir,   0-768,           Less than 20%, 20-50%, 50-100%
 #gpioa, 11, 0,  (unused analog),     NA,              NA
