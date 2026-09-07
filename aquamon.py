@@ -700,28 +700,6 @@ class Control:
         self.local_log_path = Path('/tmp/aquamon.log')
         self.saved_log_path = Path(__file__).parent / 'logs/aquamon.log'
 
-        # Create notifier for the watchdog
-        self.notifier = sdnotify.SystemdNotifier()
-
-        self.logger = logging.getLogger("Logger")
-        self.logger.setLevel(logging.INFO)
-
-        def log_converter(*args):
-            utc = datetime.now(ZoneInfo("UTC"))
-            return utc.astimezone(ZoneInfo(self.timezone)).timetuple()
-
-        # Keep one backup file, each max 100K
-        handler = CustomRcloneHandler(
-            self.local_log_path, maxBytes=100**4, backupCount=1, controller=self
-        )
-
-        # Standard CSV-like format: Time,Value
-        formatter = logging.Formatter('%(asctime)s, %(message)s', datefmt='%Y-%m-%d %H:%M')
-        handler.setFormatter(formatter)
-
-        handler.formatter.converter = log_converter
-        self.logger.addHandler(handler)
-
         # List of required environment variables
         required_vars = {
             'me': 'AQUAMON_EMAIL',
@@ -807,6 +785,28 @@ class Control:
         self.analog_ports = list(range(1, 14))
         self.digital_ports = list(range(14, 24))
         self.i2c_ports = [25]
+
+        # Create notifier for the watchdog
+        self.notifier = sdnotify.SystemdNotifier()
+
+        self.logger = logging.getLogger("Logger")
+        self.logger.setLevel(logging.INFO)
+
+        def log_converter(*args):
+            utc = datetime.now(ZoneInfo("UTC"))
+            return utc.astimezone(ZoneInfo(self.timezone)).timetuple()
+
+        # Keep one backup file, each max 100K
+        handler = CustomRcloneHandler(
+            self.local_log_path, maxBytes=100**4, backupCount=1, controller=self
+        )
+
+        # Standard CSV-like format: Time,Value
+        formatter = logging.Formatter('%(asctime)s, %(message)s', datefmt='%Y-%m-%d %H:%M')
+        handler.setFormatter(formatter)
+
+        handler.formatter.converter = log_converter
+        self.logger.addHandler(handler)
 
         self.i2c_lock = threading.Lock()
 
