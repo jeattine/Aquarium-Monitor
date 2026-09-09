@@ -1148,8 +1148,7 @@ class Control:
 
     def test_and_report(self):
         self.report_calls += 1
-        for sensor in self.my_sensors:
-            sensor_current_values = [sensor.test() for sensor in self.my_sensors]
+        sensor_current_values = [sensor.test() for sensor in self.my_sensors]
         # If there was an alarm active after this round of sampling, set the led alarm
         if self.alarm_active:
             self.set_alarm_led()
