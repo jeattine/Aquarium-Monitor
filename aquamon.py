@@ -165,7 +165,6 @@ class GpioAnalog(Sensor):
         # Create a running average. Dump (1/trim_amount) from highest/lowest samples
         if self.enable_averaging:
             temp_samples = sorted(list(self.samples))
-            # Trim 12.5% lowest and 12.5% highest
             trim_low = int(len(temp_samples)/self.trim_amount)
             trim_high = int(len(temp_samples)) - trim_low
             temp_samples = temp_samples[trim_low:trim_high]
@@ -182,6 +181,7 @@ class GpioDigital(Sensor):
         self.previous_state = 0
         self.ones_count = self.zeros_count = 0
         self.ones_total = self.zeros_total = 0
+        self.count_threshold = 3
         self.value_zero_text = self.config_info[5].strip()
         self.value_one_text = self.config_info[6].strip()
 
@@ -209,9 +209,9 @@ class GpioDigital(Sensor):
                 self.ones_count = 0
             self.zeros_count += 1
             self.zeros_total += 1
-        if self.ones_count > 3:
+        if self.ones_count > self.count_threshold:
             self.snapshot = 1
-        elif self.zeros_count > 3:
+        elif self.zeros_count > self.count_threshold:
             self.snapshot = 0
 
     def is_port_valid(self):
@@ -311,15 +311,17 @@ class ThreeState(GpioAnalog):
         self.low_level_text = self.config_info[5].strip()
         self.mid_level_text = self.config_info[6].strip()
         self.high_level_text = self.config_info[7].strip()
+        # Assumes 10K resistor across upper sensor
+        self.boundary_high = 768.0
+        self.boundary_low = 256.0
 
     def read_value(self):
         level = self.averaged_sample
         return level
     def read_value_text(self, value):
-        # Baesd on 10K resistor across upper sensor
-        if value > 768.0:
+        if value > self.boundary_high:
             return self.low_level_text
-        elif value < 256.0:
+        elif value < self.boundary_low:
             return self.high_level_text
         return self.mid_level_text
 
@@ -330,20 +332,23 @@ class FourState(GpioAnalog):
         self.level2_text = self.config_info[6].strip()
         self.level3_text = self.config_info[7].strip()
         self.level4_text = self.config_info[8].strip()
+        #   Assumes:
+        #   5K across upper sensor
+        #   15K across middle sensor
+        #   none across lower sensor
+        self.boundary1_2 = 172.0
+        self.boundary2_3 = 512.0
+        self.boundary3_4 = 854.0
 
     def read_value(self):
         level = self.averaged_sample
         return level
     def read_value_text(self, value):
-        # Based on resistor of:
-        #   5K across upper sensor
-        #   15K across middle sensor
-        #   none across lower sensor
-        if value > 854.0:
+        if value > self.boundary3_4:
             return self.level4_text
-        elif value > 512.0:
+        elif value > self.boundary2_3:
             return self.level3_text
-        elif value > 172.0:
+        elif value > self.boundary1_2:
             return self.level2_text
         return self.level1_text
 
@@ -357,14 +362,11 @@ class Battery(GpioAnalog):
         self.good_text = self.config_info[6].strip()
         self.fair_text = self.config_info[8].strip()
         self.bad_text = self.config_info[9].strip()
+        # (+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO)
+        self.voltage_scaling = 68.2 # 0V-15V --> 0V-3.3V --> digital 0-1023
 
     def read_value(self):
-        # ---------------------------------------------------------------------------
-        # Requires the following configuration:
-        #(+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO input)
-        # Translates the 0V-15V --> 0V-3.3V --> digital 0-1023
-        #----------------------------------------------------------------------------
-        voltage = self.averaged_sample/68.2
+        voltage = self.averaged_sample/self.voltage_scaling
         return voltage
 
     def read_value_text(self, value):
@@ -670,7 +672,7 @@ class Control:
         self.display_ph = 0.0
         self.display_temp = 0.0
         self.saved_log_size = 0
-        self.feed_seconds = None
+        self.feed_seconds = 0
 
         # Lists
         self.my_sensors = []
@@ -687,7 +689,7 @@ class Control:
         self.feed_start = None
         self.maintenance_released = None
 
-        # Strings and paths
+        # Strings and Path objects
         self.start_time_str = None
         self.alarm_text = None
         self.cloud_status_path = None
