@@ -708,7 +708,7 @@ class Control:
             'email_pw': 'AQUAMON_EMAIL_PW'
         }
         # Mapping config keys to Class names
-        self.SENSOR_MAP = {
+        self.sensor_map = {
             'gpioa': GpioAnalog,
             'gpiod': GpioDigital,
             'temp': TempSensor,
@@ -901,7 +901,7 @@ class Control:
                     sensor_type = parts[0].strip().lower()
                     sensor_validated = False
                     # Check if sensor_type matches one of our known sensor types
-                    for key, sensor_class in self.SENSOR_MAP.items():
+                    for key, sensor_class in self.sensor_map.items():
                         if sensor_type == key:
                             self.my_sensors.append(sensor_class(self, parts))
                             sensor_validated = True
@@ -1062,7 +1062,7 @@ class Control:
         self.external_led.on()
 
     def set_feed_led(self):
-        self.external_led.blink(on_time=1.0, off_time=0.5)
+        self.external_led.blink(on_time=2.0, off_time=0.5)
 
     def reset_alarm_led(self):
         self.external_led.off()
