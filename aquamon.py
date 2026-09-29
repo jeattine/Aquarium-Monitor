@@ -489,13 +489,11 @@ class CalibrationButtons:
         if self.controller.maintenance_mode:
             if self.ph_sensor.ph_ezo.calibrate("mid", self.controller.ph_calibrate_mid):
                 self.controller.calibrate_text = "Success"
-
             else:
                 self.controller.calibrate_text = "Failed"
             with self.controller.i2c_lock:
                 self.controller.update_display()
             self.controller.logger.info(f"Mid calibration {self.controller.calibrate_text}")
-
 
     def _handle_mid_released_button(self):
         if self.controller.maintenance_mode:
