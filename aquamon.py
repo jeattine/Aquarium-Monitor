@@ -291,7 +291,7 @@ class RandomFlowSensor(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(RandomFlowSensor, self).__init__(controller, config_file_data, False)
         # set the sample buffer to 128 entries
-        self.samples = deque(range(0,1024,8), maxlen=128)
+        self.samples = deque(range(0,1024,16), maxlen=64)
 
     def read_value(self):
         # Convert the sample data into a standard deviation
