@@ -8,9 +8,9 @@ temp,    2, 2,  Water Temp,          75-82,           10020, 2.3
 battery, 4,24,  Battery,             13.2-15.0,       13.2, Good, 12.9, Fair, Poor
 light,   5, 8,  Scrubber Light,      21:15-09:45?200-1023+10:15-20:45?0-300
 rflow,   6, 1,  Wave Makers,         14:20-14:00?10-500, NA, NA
-3state,  7, 1,  Water level,         14:20-14:00?256-768, Low, Ok, High
-light,   8, 2,  Main Light,          11:50-18:40?900-1023+22:00-08:00?0-550
-3state,  9, 1,  Sump Level,          14:20-14:00?256-768, Low, Ok, High
+3state,  7, 1,  Water level,         14:20-14:00?256-768, Low, Good, High
+light,   8, 2,  Main Light,          11:50-18:40?890-1023+22:00-08:00?0-570
+3state,  9, 1,  Sump Level,          14:20-14:00?256-768, Low, Good, High
 3state, 10, 8,  Top-off reservoir,   0-768,           Less than 20%, 20-50%, 50-100%
 #gpioa, 11, 0,  (unused analog),     NA,              NA
 #gpioa, 12, 0,  (unused analog),     NA,              NA
@@ -18,12 +18,12 @@ light,   8, 2,  Main Light,          11:50-18:40?900-1023+22:00-08:00?0-550
 #
 ###################  d  i g i t a l   s e n s o r   s e c t i o n  ##################
 gpiod,  14,  1,  Return Pump,         14:20-14:00?0,   Running, Shutdown
-gpiod,  15,  4,  Overflow box,        1,               High, Ok
+gpiod,  15,  4,  Overflow box,        1,               High, Good
 gpiod,  16,  1,  Switched Power,      14:20-14:00?0,   On, Off
-gpiod,  17,  4,  Protein Skimmer,     1,               Full, Ok
+gpiod,  17,  4,  Protein Skimmer,     1,               Full, Good
 #gpiod, 18,  4,  (unused),            NA,              NA
 floor,  19,  1,  Floor,               1,               Wet, Dry
-gpiod,  20,  8,  Filter Roller,       1,               Low, Ok
+gpiod,  20,  8,  Filter Roller,       1,               Low, Good
 #gpiod, 21,  0,  (unused digital),    NA,              NA
 #gpiod, 22,  0,  (unused digital),    NA,              NA
 #gpiod, 23,  0,  (unused digital),    NA,              NA
@@ -52,10 +52,10 @@ ph,     25,  2, PH,                  7.8-8.5,          30
 server_update_freq=60
 # Seconds between sampling the input ports
 sample_time=2
-# PH high calibration solution at 25 C
-ph_calibrate_high=10.01
-# PH mid calibration solution at 25 C
-ph_calibrate_mid=7.01
+# PH high calibration solution at 72 F
+ph_calibrate_high=10.03
+# PH mid calibration solution at 72 F
+ph_calibrate_mid=7.02
 # Active maintenance mode warning timeout in minutes
 maintenance_timeout=30
 # Feed mode timeout in minutes
