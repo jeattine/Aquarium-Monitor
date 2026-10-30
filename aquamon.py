@@ -1057,9 +1057,11 @@ class Control:
         self.external_led.blink(on_time=0.5, off_time=0.5)
 
     def set_maintenance_led(self):
+        self.alarm_led_active = False
         self.external_led.on()
 
     def set_feed_led(self):
+        self.alarm_led_active = False
         self.external_led.blink(on_time=2.0, off_time=0.5)
 
     def reset_alarm_led(self):
