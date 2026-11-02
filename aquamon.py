@@ -798,7 +798,7 @@ class Control:
 
         # Keep one backup file, each max 100K
         handler = CustomRcloneHandler(
-            self.local_log_path, maxBytes=100**4, backupCount=1, controller=self
+            self.local_log_path, maxBytes=10**5, backupCount=1, controller=self
         )
 
         # Standard CSV-like format: Time,Value
