@@ -1235,6 +1235,8 @@ class Control:
         self.maintenance_held = True
         self.maintenance_mode = True
         self.set_maintenance_led()
+        with self.i2c_lock:
+            self.update_display()
         self.maintenance_start = datetime.now(ZoneInfo("UTC"))
         self.logger.info("Maintenance started...")
 
@@ -1257,6 +1259,8 @@ class Control:
             self.feed_seconds = int(feed_time_remaining.total_seconds())
             self.feed_mode = True
             self.set_feed_led()
+            with self.i2c_lock:
+                self.update_display()
             self.logger.info("Feed mode...")
 
     def reset_feed_mode(self):
