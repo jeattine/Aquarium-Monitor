@@ -181,7 +181,6 @@ class GpioDigital(Sensor):
         self.previous_state = 0
         self.ones_count = self.zeros_count = 0
         self.ones_total = self.zeros_total = 0
-        self.count_threshold = 3
         self.value_zero_text = self.config_info[5].strip()
         self.value_one_text = self.config_info[6].strip()
 
@@ -209,9 +208,9 @@ class GpioDigital(Sensor):
                 self.ones_count = 0
             self.zeros_count += 1
             self.zeros_total += 1
-        if self.ones_count > self.count_threshold:
+        if self.ones_count > self.controller.sample_threshold:
             self.snapshot = 1
-        elif self.zeros_count > self.count_threshold:
+        elif self.zeros_count > self.controller.sample_threshold:
             self.snapshot = 0
 
     def is_port_valid(self):
@@ -723,7 +722,8 @@ class Control:
             'server_update_freq',
             'sample_time',
             'maintenance_timeout',
-            'feed_timeout'
+            'feed_timeout',
+            'sample_threshold'
         ]
 
         # Configurable float settings
@@ -750,7 +750,8 @@ class Control:
             'sample_time',
             'email_recipients',
             'maintenance_timeout',
-            'feed_timeout'
+            'feed_timeout',
+            'sample_threshold'
         ]
 
         # Supported cloud providers

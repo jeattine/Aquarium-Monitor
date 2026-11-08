@@ -52,6 +52,8 @@ ph,     25,  2, PH,                  7.8-8.5,          30
 server_update_freq=60
 # Seconds between sampling the input ports
 sample_time=2
+# Number of consecutive failed digital samples before setting alarm
+sample_threshold=3
 # PH high calibration solution at 72 F
 ph_calibrate_high=10.03
 # PH mid calibration solution at 72 F
