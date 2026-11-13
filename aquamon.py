@@ -110,7 +110,7 @@ class Sensor:
                     if (self.last_sent_alert + nag_window) < utc_time:
                         c.email_text.append(f'{self.read_label()} Alert!\n')
                         self.last_sent_alert = utc_time
-                        # force a server update prior to sending the alarm
+                        # Force a server update prior to sending the alarm
                         c.report_calls = c.server_update_freq / c.sample_time
                         self.alarm_count = self.alarm_count + 1
                         if self.alarm_count == 2:
@@ -289,7 +289,7 @@ class TempSensor(GpioAnalog):
 class RandomFlowSensor(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(RandomFlowSensor, self).__init__(controller, config_file_data, False)
-        # set the sample buffer to 128 entries
+        # Set the sample buffer to 128 entries
         self.samples = deque(range(0,1024,16), maxlen=64)
 
     def read_value(self):
@@ -334,7 +334,7 @@ class FourState(GpioAnalog):
         #   Assumes:
         #   5K across upper sensor
         #   15K across middle sensor
-        #   none across lower sensor
+        #   None across lower sensor
         self.boundary1_2 = 172.0
         self.boundary2_3 = 512.0
         self.boundary3_4 = 854.0
@@ -354,7 +354,7 @@ class FourState(GpioAnalog):
 class Battery(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(Battery, self).__init__(controller, config_file_data)
-        # initialize buffer with a value close to what is expected
+        # Initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
         self.good_fair_threshold = float(self.config_info[5].strip())
         self.fair_bad_threshold = float(self.config_info[7].strip())
@@ -438,7 +438,7 @@ class Ph(Sensor):
             return f"pH:{value:2.2f}"
 
     def read_value_text(self, value):
-        # need to include the mix/max values/timestamps
+        # Need to include the mix/max values/timestamps
         min_ts = self.min_timestamp.strftime("%I:%M %p")
         max_ts = self.max_timestamp.strftime("%I:%M %p")
         return f"{value:2.2f}  max:{self.max_ph:3.2f} at {max_ts}  min:{self.min_ph:3.2f} at {min_ts}"
@@ -556,7 +556,7 @@ class EzoDevice(threading.Thread):
                 read = i2c_msg.read(self.address, 20)
                 self.bus.i2c_rdwr(read)
             data = list(read)
-            # debug: print(f"Data from PHEZO: {data}")
+            # Debug: print(f"Data from PHEZO: {data}")
 
             # First byte is the response code (1 = Success)
             if data[0] == 1:
@@ -593,7 +593,7 @@ class EzoDevice(threading.Thread):
         except Exception as e:
             print(f"Calibration failed with exception {e}")
             return False
-        # return 1 if it worked
+        # Return 1 if it worked
         if response[0] == 1:
             return True
         elif response[0] == 2:
@@ -797,7 +797,7 @@ class Control:
             utc = datetime.now(ZoneInfo("UTC"))
             return utc.astimezone(ZoneInfo(self.timezone)).timetuple()
 
-        # Keep one backup file, each max 100K
+        # Generate a date-time stamped backup file when log reaches 100K
         handler = CustomRcloneHandler(
             self.local_log_path, maxBytes=10**5, backupCount=1, controller=self
         )
@@ -1012,7 +1012,7 @@ class Control:
         except Exception as e:
             print(f"Error testing for {remote_path}. Exception: {e}")
             result = []
-        # extract the file_name portion of the remote path specification
+        # Extract the file_name portion of the remote path specification
         file_name = remote_path.rsplit('/', 1)[-1]
         return file_name in result.stdout.strip()
 
@@ -1022,7 +1022,6 @@ class Control:
         return local_time
 
     def get_local_timestamp(self):
-        """Returns a timestamp string in the configured timezone"""
         utc_now = datetime.now(ZoneInfo("UTC"))
         local_now = self.convert_to_local_time(utc_now)
         return local_now.strftime("%A %B %d %I:%M:%S %p")
@@ -1243,7 +1242,7 @@ class Control:
 
     def reset_maintenance(self):
         # If the button was held for 'hold_time' seconds, we must now reset maintenance mode
-        # otherwise we assume the feed mode button was pressed, so we set feed mode.
+        # Otherwise we assume the feed mode button was pressed, so we set feed mode.
         if self.maintenance_held:
             self.maintenance_held = False # Reset for next time
             self.maintenance_mode = False
@@ -1311,7 +1310,7 @@ class Control:
         # Log that we are terminating
         self.logger.info("Terminating...")
 
-        # stop event may not have been called yet in certain exit flows.
+        # Stop event may not have been called yet in certain exit flows.
         self.stop_event.set()
 
         # Clean up hardware resources
