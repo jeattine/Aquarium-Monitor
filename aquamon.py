@@ -47,15 +47,17 @@ from smbus2 import SMBus, i2c_msg
 class Sensor:
     def __init__(self, controller, config_file_data):
         self.controller = controller
-        self.config_info = config_file_data
         # Initialize very old time
         self.last_sent_alert = datetime.now(ZoneInfo("UTC")) - timedelta(days=365)
         self.test_active = False
         self.alarm_count = 0
-        self.port = self.config_info[1].strip()
-        self.nag_level = float(self.config_info[2].strip())
-        self.label = self.config_info[3].strip()
-        self.conditions = self.config_info[4].strip().split('+')
+        # Set up values from the configuration file
+        self.port = config_file_data[1].strip()
+        self.nag_level = float(config_file_data[2].strip())
+        self.label = config_file_data[3].strip()
+        self.conditions = config_file_data[4].strip().split('+')
+        self.parameters = config_file_data[5::]
+
 
     def read_value(self):
         # Needs to be implemented in the derived classes
@@ -181,8 +183,8 @@ class GpioDigital(Sensor):
         self.previous_state = 0
         self.ones_count = self.zeros_count = 0
         self.ones_total = self.zeros_total = 0
-        self.value_zero_text = self.config_info[5].strip()
-        self.value_one_text = self.config_info[6].strip()
+        self.value_zero_text = self.parameters[0].strip()
+        self.value_one_text = self.parameters[1].strip()
 
     def read_value(self):
         return self.snapshot
@@ -227,8 +229,8 @@ class TempSensor(GpioAnalog):
         self.ema_value = None
         self.alpha = 0.2  # Smoothing factor
         self.samples = deque([500] * 16, maxlen=16)
-        self.pad_resistor = float(self.config_info[5].strip())
-        self.calibration = float(self.config_info[6].lstrip())
+        self.pad_resistor = float(self.parameters[0].strip())
+        self.calibration = float(self.parameters[1].lstrip())
 
         # Check if this instance is the primary water sensor
         self.is_water_sensor = "Water" in self.label
@@ -307,9 +309,9 @@ class LightSensor(GpioAnalog):
 class ThreeState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(ThreeState, self).__init__(controller, config_file_data)
-        self.low_level_text = self.config_info[5].strip()
-        self.mid_level_text = self.config_info[6].strip()
-        self.high_level_text = self.config_info[7].strip()
+        self.low_level_text = self.parameters[0].strip()
+        self.mid_level_text = self.parameters[1].strip()
+        self.high_level_text = self.parameters[2].strip()
         # Assumes 10K resistor across upper sensor
         self.boundary_high = 768.0
         self.boundary_low = 256.0
@@ -327,10 +329,10 @@ class ThreeState(GpioAnalog):
 class FourState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(FourState, self).__init__(controller, config_file_data)
-        self.level1_text = self.config_info[5].strip()
-        self.level2_text = self.config_info[6].strip()
-        self.level3_text = self.config_info[7].strip()
-        self.level4_text = self.config_info[8].strip()
+        self.level1_text = self.parameters[0].strip()
+        self.level2_text = self.parameters[1].strip()
+        self.level3_text = self.parameters[2].strip()
+        self.level4_text = self.parameters[3].strip()
         #   Assumes:
         #   5K across upper sensor
         #   15K across middle sensor
@@ -356,11 +358,11 @@ class Battery(GpioAnalog):
         super(Battery, self).__init__(controller, config_file_data)
         # Initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
-        self.good_fair_threshold = float(self.config_info[5].strip())
-        self.fair_bad_threshold = float(self.config_info[7].strip())
-        self.good_text = self.config_info[6].strip()
-        self.fair_text = self.config_info[8].strip()
-        self.bad_text = self.config_info[9].strip()
+        self.good_fair_threshold = float(self.parameters[0].strip())
+        self.fair_bad_threshold = float(self.parameters[2].strip())
+        self.good_text = self.parameters[1].strip()
+        self.fair_text = self.parameters[3].strip()
+        self.bad_text = self.parameters[4].strip()
         # (+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO)
         self.voltage_scaling = 68.2 # 0V-15V --> 0V-3.3V --> digital 0-1023
 
@@ -383,7 +385,7 @@ class Ph(Sensor):
         self.raw_high = None
         self.min_max_init(datetime.now(ZoneInfo("UTC")))
         self.day_stamp = 0  # Initialization on first sensor read after timezone is avail
-        self.poll_frequency = int(self.config_info[5].strip())
+        self.poll_frequency = int(self.parameters[0].strip())
 
         try:
             self.ph_ezo = EzoDevice(controller, self, address=0x63)

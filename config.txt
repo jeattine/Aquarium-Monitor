@@ -1,5 +1,5 @@
 #------------------------------------------------------------------------------------
-#Class, Port, Nag, Label,             Condition,        Class specific parms
+#Class, Port, Nag, Label,            Condition,       Class specific parameters
 #------------------------------------------------------------------------------------
 #####################  a n a l o g  s e n s o r  s e c t i o n  ######################
 temp,    1, 8,  Room Temp,           60-82,           10020, 0.3
