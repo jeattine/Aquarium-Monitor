@@ -183,6 +183,8 @@ class GpioDigital(Sensor):
         self.previous_state = 0
         self.ones_count = self.zeros_count = 0
         self.ones_total = self.zeros_total = 0
+        if len(self.parameters) != 2:
+            sys.exit(f"Port {self.port}: The Digital Sensor requires two parameters: zero_text, one_text")
         self.value_zero_text = self.parameters[0].strip()
         self.value_one_text = self.parameters[1].strip()
 
@@ -229,8 +231,16 @@ class TempSensor(GpioAnalog):
         self.ema_value = None
         self.alpha = 0.2  # Smoothing factor
         self.samples = deque([500] * 16, maxlen=16)
-        self.pad_resistor = float(self.parameters[0].strip())
-        self.calibration = float(self.parameters[1].lstrip())
+        if len(self.parameters) != 2:
+            sys.exit(f"Port {self.port}: The Temperature Sensor requires two parameters: pad resistor, calibration adjust")
+        try:
+            self.pad_resistor = float(self.parameters[0].strip())
+        except:
+            sys.exit(f"Port {self.port}: The Temperature Sensor pad resistor parameter ({self.parameters[0].strip()}) must be a floating point number.")
+        try:
+            self.calibration = float(self.parameters[1].lstrip())
+        except:
+            sys.exit(f"Port {self.port}: The Temperature Sensor calibration parameter ({self.parameters[1].strip()}) must be a floating point number.")
 
         # Check if this instance is the primary water sensor
         self.is_water_sensor = "Water" in self.label
@@ -309,6 +319,8 @@ class LightSensor(GpioAnalog):
 class ThreeState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(ThreeState, self).__init__(controller, config_file_data)
+        if len(self.parameters) != 3:
+            sys.exit(f"Port {self.port}: The ThreeState Sensor requires three parameters: level1_text, level2_text, level3_text")
         self.low_level_text = self.parameters[0].strip()
         self.mid_level_text = self.parameters[1].strip()
         self.high_level_text = self.parameters[2].strip()
@@ -329,6 +341,8 @@ class ThreeState(GpioAnalog):
 class FourState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(FourState, self).__init__(controller, config_file_data)
+        if len(self.parameters) != 4:
+            sys.exit(f"Port {self.port}: The FourState Sensor requires four parameters: level1_text, level2_text, level3_text")
         self.level1_text = self.parameters[0].strip()
         self.level2_text = self.parameters[1].strip()
         self.level3_text = self.parameters[2].strip()
@@ -358,11 +372,20 @@ class Battery(GpioAnalog):
         super(Battery, self).__init__(controller, config_file_data)
         # Initialize buffer with a value close to what is expected
         self.samples = deque([910] * 16, maxlen=16)
-        self.good_fair_threshold = float(self.parameters[0].strip())
-        self.fair_bad_threshold = float(self.parameters[2].strip())
+        if len(self.parameters) != 5:
+            sys.exit(f"Port {self.port}: The Battery Sensor requires five parameters: 1st_threshold, good_text, 2nd_threshold, fair_text, bad_text")
+        try:
+            self.good_fair_threshold = float(self.parameters[0].strip())
+        except:
+            sys.exit(f"Port {self.port}: The Battery Sensor threshold parameter ({self.parameters[0].strip()}) must be a floating point number.")
         self.good_text = self.parameters[1].strip()
+        try:
+            self.fair_bad_threshold = float(self.parameters[2].strip())
+        except:
+            sys.exit(f"Port {self.port}: The Battery Sensor threshold parameter ({self.parameters[2].strip()}) must be a floating point number.")
         self.fair_text = self.parameters[3].strip()
         self.bad_text = self.parameters[4].strip()
+
         # (+12V battery)--(10K ohm)--(+GPIO input)--(2.8K ohm)--(-battery)--(-GPIO)
         self.voltage_scaling = 68.2 # 0V-15V --> 0V-3.3V --> digital 0-1023
 
@@ -385,8 +408,12 @@ class Ph(Sensor):
         self.raw_high = None
         self.min_max_init(datetime.now(ZoneInfo("UTC")))
         self.day_stamp = 0  # Initialization on first sensor read after timezone is avail
-        self.poll_frequency = int(self.parameters[0].strip())
-
+        if len(self.parameters) != 1:
+            sys.exit(f"Port {self.port}: The pH Sensor requires one parameter: poll_frequency")
+        try:
+            self.poll_frequency = int(self.parameters[0].strip())
+        except:
+            sys.exit(f"Port {self.port}: The pH Sensor poll frequency parameter ({self.parameters[0].strip()}) must be an integer")
         try:
             self.ph_ezo = EzoDevice(controller, self, address=0x63)
         except Exception as e:
