@@ -342,7 +342,7 @@ class FourState(GpioAnalog):
     def __init__(self, controller, config_file_data):
         super(FourState, self).__init__(controller, config_file_data)
         if len(self.parameters) != 4:
-            sys.exit(f"Port {self.port}: The FourState Sensor requires four parameters: level1_text, level2_text, level3_text")
+            sys.exit(f"Port {self.port}: The FourState Sensor requires four parameters: level1_text, level2_text, level3_text, level4_text")
         self.level1_text = self.parameters[0].strip()
         self.level2_text = self.parameters[1].strip()
         self.level3_text = self.parameters[2].strip()
